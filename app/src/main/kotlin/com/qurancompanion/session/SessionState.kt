@@ -1,11 +1,15 @@
 package com.qurancompanion.session
 
 import com.qurancompanion.data.reference.QuranPosition
+import com.qurancompanion.engine.reference.WordPosition
+import com.qurancompanion.engine.session.SessionState as EngineState
+import com.qurancompanion.engine.session.SessionUiState
 
+/** Coarse app-level status derived from the engine state (notification, Home, service gating). */
 enum class ListeningStatus {
-    /** No session in this process. */
+    /** No session (or a stopped one whose summary was dismissed). */
     IDLE,
-    /** Mic capture running, audio fed to the recognizer. */
+    /** A session is running: mic capture + recognition (hint playback included). */
     LISTENING,
     /** Paused by the user (mic released). */
     PAUSED,
@@ -19,34 +23,54 @@ enum class ListeningStatus {
 
 enum class InterruptionReason { CALL, AUDIO_FOCUS, HEADSET_UNPLUGGED, CAPTURE_ERROR, PERMISSION_DENIED }
 
-enum class HintKind { NEXT_WORD, FULL_AYAH }
+/** Readiness of position tracking (engine reference + controller), shown on Home. */
+enum class TrackingReadiness { FETCHING_REFERENCE, READY, UNAVAILABLE }
 
-sealed interface AssistanceState {
-    data object None : AssistanceState
-    /** Gentle offer (user pressed Lukma, or — later — PauseDetector proposed help). */
-    data class Offered(val position: QuranPosition) : AssistanceState
-    data class Playing(val kind: HintKind, val position: QuranPosition) : AssistanceState
-    data class Unavailable(val message: String) : AssistanceState
-}
-
-data class SessionState(
+/**
+ * Live session as seen by the UI: the engine's [SessionUiState] plus Android-side facts
+ * (Room id, interruption reason, playback isolation, transient notices).
+ */
+data class LiveSession(
+    val engine: SessionUiState = SessionUiState(),
+    val readiness: TrackingReadiness = TrackingReadiness.FETCHING_REFERENCE,
+    val referenceLoadMs: Long? = null,
+    /** Room id of the persisted session row. */
     val sessionId: Long? = null,
-    val status: ListeningStatus = ListeningStatus.IDLE,
-    val startPosition: QuranPosition = QuranPosition.START,
-    /** Last confirmed position. Never moved by hint playback. */
-    val position: QuranPosition = QuranPosition.START,
-    /** Active listening time accumulated before [activeSinceElapsed]. */
-    val accumulatedMs: Long = 0,
-    /** Monotonic time listening (re)started, null when not listening. */
-    val activeSinceElapsed: Long? = null,
-    val assistance: AssistanceState = AssistanceState.None,
+    val startPosition: QuranPosition? = null,
+    /** Where the user asked to start (Quran screen); only used for display until located. */
+    val requestedStart: QuranPosition? = null,
+    /** Active time (paused/interrupted excluded), from the controller snapshot, whole seconds. */
+    val durationMs: Long = 0,
+    val interruption: InterruptionReason? = null,
     /** True while Qari audio plays (plus a short tail): no audio reaches the recognizer. */
     val recognitionSuppressed: Boolean = false,
-    val interruption: InterruptionReason? = null,
+    /** Gentle, non-blocking message (e.g. "Qari audio is not downloaded yet"). */
+    val notice: String? = null,
+    val summaryDismissed: Boolean = false,
 ) {
-    fun durationMs(nowElapsed: Long): Long =
-        accumulatedMs + (activeSinceElapsed?.let { (nowElapsed - it).coerceAtLeast(0) } ?: 0)
+    val state: EngineState get() = engine.state
+
+    val status: ListeningStatus
+        get() = when (engine.state) {
+            EngineState.PAUSED -> ListeningStatus.PAUSED
+            EngineState.INTERRUPTED -> ListeningStatus.INTERRUPTED
+            EngineState.STOPPED -> if (summaryDismissed) ListeningStatus.IDLE else ListeningStatus.STOPPED
+            in EngineState.IN_SESSION -> ListeningStatus.LISTENING
+            else -> ListeningStatus.IDLE
+        }
+
+    val isPlayingHint: Boolean get() = engine.state in EngineState.PLAYING
+
+    /** Word to highlight: the candidate (includes provisional tokens), else the confirmed word. */
+    val current: WordPosition? get() = engine.candidate ?: engine.confirmed
+
+    /** Last confirmed position, or where the session was asked to start. */
+    val position: QuranPosition
+        get() = engine.confirmed?.toQuranPosition() ?: requestedStart ?: startPosition ?: QuranPosition.START
 
     /** Whether microphone audio should currently flow to the recognizer. */
-    val audioGateOpen: Boolean get() = status == ListeningStatus.LISTENING && !recognitionSuppressed
+    val audioGateOpen: Boolean
+        get() = status == ListeningStatus.LISTENING && !recognitionSuppressed && !isPlayingHint
 }
+
+fun WordPosition.toQuranPosition() = QuranPosition(surah, ayah, wordIndex)

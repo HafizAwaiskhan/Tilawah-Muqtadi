@@ -54,6 +54,10 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            // JVM tests that need the real reference DB read it from here (skipped when absent).
+            it.systemProperty("quranRefDb", rootProject.file("data/build/$referenceDbName").absolutePath)
+        }
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -105,4 +109,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(kotlin("test"))
+    // JVM tests open data/build/quran_ref_v1.db directly.
+    testImplementation("org.xerial:sqlite-jdbc:3.41.2.2")
 }

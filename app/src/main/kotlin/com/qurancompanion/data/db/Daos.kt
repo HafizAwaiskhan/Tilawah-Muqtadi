@@ -33,6 +33,9 @@ interface SessionDao {
     )
     suspend fun updatePosition(id: Long, surah: Int, ayah: Int, word: Int, durationMs: Long)
 
+    @Query("UPDATE sessions SET startSurah = :surah, startAyah = :ayah WHERE id = :id")
+    suspend fun updateStart(id: Long, surah: Int, ayah: Int)
+
     @Query("UPDATE sessions SET status = :status, durationMs = :durationMs, endedAt = :endedAt WHERE id = :id")
     suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?)
 

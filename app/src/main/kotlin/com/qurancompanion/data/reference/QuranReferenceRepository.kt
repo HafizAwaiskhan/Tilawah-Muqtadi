@@ -22,6 +22,12 @@ interface QuranReferenceRepository {
     suspend fun ayahs(surah: Int, script: Script = Script.INDOPAK): List<AyahText>
     suspend fun ayah(surah: Int, ayah: Int, script: Script = Script.INDOPAK): AyahText?
 
+    /**
+     * Streams every `word` row (ordered by id) to [consumer] for building the engine reference.
+     * Returns false when the reference DB is not available.
+     */
+    suspend fun forEachEngineWord(consumer: (EngineWordRow) -> Unit): Boolean = false
+
     /** Value from the `meta` table (e.g. [META_ATTRIBUTION_TANZIL]), or null. */
     suspend fun meta(key: String): String?
 

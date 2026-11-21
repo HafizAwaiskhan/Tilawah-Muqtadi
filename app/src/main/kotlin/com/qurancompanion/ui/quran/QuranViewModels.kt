@@ -12,7 +12,7 @@ import com.qurancompanion.data.reference.ReferenceStatus
 import com.qurancompanion.data.reference.SurahInfo
 import com.qurancompanion.data.session.BookmarkRepository
 import com.qurancompanion.session.RecitationSessionManager
-import com.qurancompanion.session.SessionState
+import com.qurancompanion.session.LiveSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -54,13 +54,13 @@ data class AyahListUiState(
     val ayahs: List<AyahText> = emptyList(),
     val allSurahs: List<SurahInfo> = emptyList(),
     val bookmarkedAyahs: Set<Int> = emptySet(),
-    val session: SessionState = SessionState(),
+    val session: LiveSession = LiveSession(),
     val scrollToAyah: Int? = null,
 ) {
     /** Word to highlight in [ayah] when the live session is there. */
     fun highlightFor(ayah: AyahText): Int? {
-        val p = session.position
-        return if (session.status.isRunning && p.surah == ayah.surah && p.ayah == ayah.ayah) p.word.coerceAtLeast(1) else null
+        val p = session.current ?: return null
+        return if (session.status.isRunning && p.surah == ayah.surah && p.ayah == ayah.ayah) p.wordIndex else null
     }
 }
 
