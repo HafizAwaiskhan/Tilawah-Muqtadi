@@ -122,11 +122,12 @@ would catch a regression.
 - Dependencies: `implementation(project(":asr"))` + `implementation(libs.onnxruntime.android)`
   (catalog 1.26.0, must stay ≥ 1.25, see above). `:asr` declares ORT `compileOnly`, so the app supplies the runtime. Only the
   shared `ai.onnxruntime` API is used.
-- Model files: `model.int8.onnx` (36.08 MB, sha256 `88f9df29…cff00f0`) + `tokens.txt` (31 lines) +
-  MIT `LICENSE` (licenses screen). Recommended: download on first run from our own host to
-  `filesDir/models/abdou-quran-asr-small/`, verify the SHA-256, then `AbdouOnnxModel.load(File, …)`
-  (memory-maps nothing extra; avoids a 36 MB heap copy). Bundling as an asset is possible: store it
-  uncompressed (`noCompress += "onnx"`) and copy it to `filesDir` once, or `load(bytes)`.
+- Model files: `model.int8.onnx` (36.08 MB, sha256 `88f9df29…cff00f0`) + `tokens.txt` (31 lines,
+  sha256 `75b53814…23e8c74f`) + MIT licence (text embedded in the app, Settings). **Implemented**:
+  `ModelDownloadManager` downloads both from the pinned Hugging Face revision on user action into
+  `filesDir/models/abdou-v1/`, verifies size + SHA-256, installs atomically;
+  `AbdouRecognitionEngine` then calls `AbdouOnnxModel.load(File, …)` (avoids a 36 MB heap copy).
+  See docs/ANDROID.md "Recognition model".
 - Threads: create the model once (load ~0.3 s x86, more on device) off the main thread. Run `accept`
   on one dedicated background dispatcher (`Dispatchers.Default.limitedParallelism(1)` or a single
   thread), because a window decode blocks for tens of ms. Use `threads = 2` intra-op. Forward events

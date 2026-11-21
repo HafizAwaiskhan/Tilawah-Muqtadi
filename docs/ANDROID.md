@@ -45,8 +45,12 @@ The reference DB `data/build/quran_ref_v1.db` is **not duplicated** under `app/`
 dir) before every build; it is stored uncompressed (`noCompress "db"`). If the file is missing
 the build still succeeds and the app shows "Quran text not included in this build".
 
-APK size is ~154 MB (ORT 1.26), almost all ONNX Runtime native libs for 4 ABIs + the 18 MB DB. Add
-`abiFilters` / App Bundle splits before release.
+APK size: `abiFilters` = arm64-v8a + armeabi-v7a (debug also x86_64 for emulators), release
+built with R8 (`isMinifyEnabled` + `isShrinkResources`, keep rule for `ai.onnxruntime.**`).
+Release unsigned **66.7 MB** (was 146.6 MB: x86/x86_64 ORT libs and 50 MB of unshrunk dex removed);
+debug 120.7 MB (was 153.8 MB). Remaining: ORT arm64 27.4 MB + armv7 19.5 MB, DB 18 MB. An App
+Bundle with ABI splits would cut a per-device download to ≈ 45 MB. The R8 build has not been run
+on a device yet.
 
 ## Package layout (`com.qurancompanion`)
 
@@ -56,9 +60,11 @@ core/audio/        AudioCapture (AudioRecord 16 kHz mono PCM16, VOICE_RECOGNITIO
                    silenced-recording callback), AudioInterruptionMonitor (audio focus,
                    ACTION_AUDIO_BECOMING_NOISY, call detection via audio-mode listener API 31+)
 core/audio/        + EnergyVad (RMS VAD, adaptive noise floor, 60 ms attack / 400 ms hangover)
-core/recognition/  QuranRecognitionEngine (emits engine RecognitionEvent/Token), ModelReadiness,
-                   UnavailableRecognitionEngine (drains audio, emits nothing),
-                   SelectableRecognitionEngine (real engine, or debug simulator per Settings)
+core/recognition/  QuranRecognitionEngine (emits engine RecognitionEvent/Token; flush()), ModelReadiness,
+                   AbdouRecognitionEngine (:asr AbdouRecognizer on one worker thread),
+                   UnavailableRecognitionEngine (manual mode: drains audio, emits nothing),
+                   SelectableRecognitionEngine (model if installed → manual → debug simulator)
+core/model/        AsrModelSpec (pinned URLs, sizes, SHA-256, licence), ModelDownloadManager
 core/playback/     QuranAudioPlaybackController (Media3; emits Started/Ended), QariAudioResolver
 core/time/         Clock (wall + monotonic) for testability
 data/settings/     UserSettings + DataStore repository
@@ -142,7 +148,7 @@ hint playback ignored, resume to the end of the range, snapshot persisted / COMP
 ## Permissions & foreground-service behaviour
 
 Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
-`POST_NOTIFICATIONS`, `VIBRATE`, `INTERNET` (future downloads only); service
+`POST_NOTIFICATIONS`, `VIBRATE`, `INTERNET` (model download on user action only); service
 `foregroundServiceType="microphone"`, not exported. Backup/device transfer disabled.
 
 * RECORD_AUDIO is requested in context: on the onboarding microphone step (skippable) and again
@@ -165,19 +171,43 @@ Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
   after playback ends; the audio gate closes meanwhile, and hints never move the position.
   ExoPlayer does not request audio focus itself (the session holds it).
 
+## Recognition model (`AbdouRecognitionEngine`, `ModelDownloadManager`)
+
+* **Download** (user action only: Onboarding "Download the model" step, Settings → Offline
+  downloads; shows 36 MB, MIT licence text + attribution). Files: `model.int8.onnx` + `tokens.txt`
+  from `huggingface.co/Abdou/quran-asr-small/resolve/<pinned revision>/`. They are written to
+  `filesDir/models/.staging-abdou-v1/*.part`; an interrupted transfer resumes with HTTP Range (a 200
+  answer restarts the file). Each file is checked for exact size + SHA-256 (constants in
+  `AsrModelSpec`, verified against `models/` by `ModelDownloadManagerTest`); a mismatch deletes it.
+  Then a `VERSION` file (spec id/version + hashes) is written and the staging dir is renamed to
+  `filesDir/models/abdou-v1/` in one step; other `abdou-*` dirs are removed. On start the install
+  counts only if `VERSION` matches the spec and the sizes are right, so a spec change forces a
+  re-download. The download runs in the app scope: it stops if the process dies and can be resumed.
+* **Engine.** One dedicated thread (`abdou-asr`) runs load (~0.3 s x86), `accept`, `flush` and
+  `reset` in order. Frames from the gated `AudioCapture` flow are time-stamped on arrival
+  (`elapsedRealtime − 20 ms`, kept contiguous while within 200 ms; a gate closure shows as a time
+  jump → new recognizer segment). Up to 30 s of audio may queue; beyond that new frames are dropped.
+  `flush()` returns after its events were handed to the controller's collector.
+* **Selection** (`SelectableRecognitionEngine.initialize`, per session): debug simulator if chosen
+  in Settings → Developer; else the model engine when installed and it loads; else manual mode.
+  Home's "Recognition model" row shows Not installed / Downloading N % / Ready / Error.
+* **Flush points** (`RecitationSessionManager.flushThen`): before Pause, Stop, Lukma request and
+  accepting an offer, and whenever the audio gate closes (hint playback, interruption).
+
 ## Remaining integration TODOs
 
-1. **Real recognizer** — implement `QuranRecognitionEngine` on ONNX Runtime (the `:asr` module's
-   quran-asr-small port) and use it inside `SelectableRecognitionEngine` instead of
-   `UnavailableRecognitionEngine`; report `ModelReadiness` (download progress feeds
-   `ModelDownloadProgress`). Token text must use the `norm_skeleton` normalization and
-   `elapsedRealtime` timestamps. If it is phoneme-based, the controller must be built with
-   `TokenUnit.PHONEME` (currently fixed per process from `QuranRecognitionEngine.unit`).
-2. **Qari audio downloads** — download manager for model + Qari audio; implement
-   `QariAudioResolver` (ayah clips + word timings) and the Home "Qari audio" readiness row.
+1. **Device validation of the recognizer**: CPU per audio second on ARM, RSS after load, battery,
+   whether the worker keeps up; tune `AbdouConfig` (window/hop) and ORT threads per device class.
+   Nothing has run on a device yet (docs/STATUS.md checklist).
+2. **Qari audio** — licensed source + permission, download manager entry, `QariAudioResolver`
+   (ayah clips + word timings), Home "Qari audio" row. Hints stay disabled until then.
 3. **Font** — licensed Indo-Pak Nastaleeq font (see "Quran text").
-4. Thresholds (pause, feedback, VAD) are tuned on synthetic data only; re-tune on real recordings.
-5. Emulator screenshots were not captured: this cloud machine has no `/dev/kvm`.
+4. Thresholds (pause, feedback, VAD) are tuned on synthetic data and professional recitations only;
+   re-tune on learner recordings.
+5. Download over metered networks: no Wi-Fi-only option or WorkManager (download stops with the
+   process); consider WorkManager + a foreground notification for large/slow downloads.
+6. App Bundle / ABI splits for distribution; release signing config.
+7. Emulator screenshots were not captured: this cloud machine has no `/dev/kvm`.
 
 ## Must be tested on a real device
 
@@ -190,3 +220,5 @@ Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
 * Hint playback isolation (no mic frames during playback + tail) once Qari audio exists.
 * Arabic word rendering/line breaking with the system font; RTL layout; TalkBack.
 * First-run DB copy time (18 MB) on low-end devices; battery drain per hour.
+* Model download on Wi-Fi/mobile, pause/resume, airplane mode mid-download, process kill mid-download.
+* Release (R8) build end-to-end: ORT JNI, Room, Hilt keep rules.

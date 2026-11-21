@@ -22,6 +22,7 @@ with written evidence in `docs/licenses/`.
 | 10 | **Qari audio — Quran.com / quranicaudio.com** | **UNVERIFIED** | No licence served with `audio_url`s. | **High** | As row 9. |
 | 11 | **Qari audio — QUL recitations** (131) | **UNVERIFIED** | Every recitation licence tab: "We don't have copyright information for this resource." | **High** | As row 9. |
 | 12 | QUL source code (GitHub TarteelAI/quranic-universal-library) | MIT | "Permission is hereby granted, free of charge, to any person obtaining a copy of this software…" (Copyright (c) 2024-present Tarteel, Inc) | Low (code only) | Not used; note MIT covers the CMS code, **not** the data. |
+| 14 | **ASR model** Abdou/quran-asr-small `model.int8.onnx` + `tokens.txt` (downloaded at runtime from the pinned HF revision, not bundled) | MIT (model); training data tlog CC BY 4.0 | "Permission is hereby granted, free of charge, to any person obtaining a copy of this software…" / "The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software." (Copyright (c) 2026 Abdou) | **Low** | Done: full MIT text + attribution shown in Settings → Offline downloads → View licence and About; SHA-256 pinned (MODEL_EVALUATION.md §3.1). |
 | 13 | Derived columns (`norm_skeleton`, `phonetic`, statuses) | Our own deterministic code output | — | Low | Never presented as Quran text; `phonetic` "v0 – requires teacher review". |
 
 ## Summary verdict

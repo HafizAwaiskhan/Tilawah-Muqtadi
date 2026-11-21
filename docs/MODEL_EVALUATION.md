@@ -164,7 +164,10 @@ Source: <https://huggingface.co/Abdou/quran-asr-small>, revision
   subsampling, **full (bidirectional) attention — not streaming**. **33,215,699 parameters
   [MEASURED from ONNX initializers]**.
 - Files: `model.int8.onnx` **36,081,762 B** (sha256 `88f9df29…cff00f0`), `model.onnx` fp32
-  133 MB, `model.pt` 133 MB, `tokens.txt` (31 lines), `spelling.json` (Uthmani→standard spelling
+  133 MB, `model.pt` 133 MB, `tokens.txt` (31 lines, 180 B, sha256
+  `75b53814499cee84a07c7b7a318524d30bcaf84273c0f8b28a04176023e8c74f`; full int8 sha256
+  `88f9df290d57b8890275d79187b77515aeeb12626a42bc76cbd0f8bfcaff00f0`, both re-checked on the local
+  files and pinned in `app/…/core/model/AsrModelSpec.kt`), `spelling.json` (Uthmani→standard spelling
   table), `retrieve.py` (fuzzy ayah lookup), full training code under `code/`.
 - Training data 1,532 h: 36 EveryAyah Hafs reciters, 3 Warsh, tarteel‑ai/tlog phone recordings
   (283 h), Iqra'Eval (21 h). Augmented with speed/tempo ×0.75–2.5, noise, reverb, low‑pass.
