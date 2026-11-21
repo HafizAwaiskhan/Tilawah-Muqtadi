@@ -34,6 +34,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import androidx.lifecycle.SavedStateHandle
+import com.qurancompanion.data.db.FlaggedWordEntity
+import com.qurancompanion.data.db.SessionEntity
+import com.qurancompanion.data.db.SessionStatus
+import com.qurancompanion.data.settings.MistakeHint
+import com.qurancompanion.ui.history.HistoryDetailViewModel
 
 private class FakeReference : QuranReferenceRepository {
     override val status: StateFlow<ReferenceStatus> = MutableStateFlow(ReferenceStatus.Missing)
@@ -87,6 +93,10 @@ class HistoryAndSettingsViewModelTest {
         vm.setMode(RecitationMode.MEMORIZATION)
         vm.setPreferredQari("  ")
         vm.setKeepHistory(false)
+        vm.setMistakeHint(MistakeHint.CORRECT_WORD)
+        vm.setMarkFlaggedWords(false)
+        vm.setVibrateOnCue(false)
+        vm.setSoftTone(true)
         runCurrent()
         val s = settings.state.value
         assertEquals(UserSettings.SPEED_RANGE.endInclusive, s.playbackSpeed)
@@ -94,6 +104,31 @@ class HistoryAndSettingsViewModelTest {
         assertEquals(RecitationMode.MEMORIZATION, s.mode)
         assertEquals(null, s.preferredQariId)
         assertTrue(!s.keepHistory)
+        assertEquals(MistakeHint.CORRECT_WORD, s.mistakeHint)
+        assertEquals(Triple(false, false, true), Triple(s.markFlaggedWords, s.vibrateOnCue, s.softTone))
         assertEquals("ATTRIBUTION", vm.attribution.value)
+    }
+
+    @Test fun newSettingDefaults() {
+        val d = UserSettings()
+        assertEquals(MistakeHint.FULL_AYAH, d.mistakeHint)
+        assertTrue(d.markFlaggedWords && d.vibrateOnCue && !d.softTone)
+    }
+
+    @Test fun historyDetailShowsFlagsAndDeleteRemovesThem() = runTest(dispatcher) {
+        val repo = FakeSessionRepository()
+        val id = repo.create(SessionEntity(startedAt = 1, startSurah = 2, startAyah = 1, lastSurah = 2, lastAyah = 5, status = SessionStatus.COMPLETED))
+        val other = repo.create(SessionEntity(startedAt = 2, startSurah = 3, startAyah = 1, lastSurah = 3, lastAyah = 2, status = SessionStatus.COMPLETED))
+        repo.addFlag(FlaggedWordEntity(sessionId = id, surah = 2, ayah = 3, wordIndex = 6, mistakeType = "SUBSTITUTION", flaggedAt = 10))
+        repo.addFlag(FlaggedWordEntity(sessionId = other, surah = 3, ayah = 1, wordIndex = 1, mistakeType = "DELETION", flaggedAt = 11))
+        val vm = HistoryDetailViewModel(SavedStateHandle(mapOf("id" to id)), repo)
+        backgroundScope.launch { vm.state.collect {} }
+        runCurrent()
+        assertEquals(id, vm.state.value.session?.id)
+        assertEquals(listOf(Triple(2, 3, 6)), vm.state.value.flags.map { Triple(it.surah, it.ayah, it.wordIndex) })
+        repo.delete(id); runCurrent()
+        assertEquals(null, vm.state.value.session)
+        assertTrue(vm.state.value.flags.isEmpty())
+        assertEquals(1, repo.flags.value.size)
     }
 }

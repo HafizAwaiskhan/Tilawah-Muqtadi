@@ -60,3 +60,18 @@ interface BookmarkDao {
     @Query("DELETE FROM bookmarks")
     suspend fun deleteAll()
 }
+
+@Dao
+interface FlaggedWordDao {
+    @Insert
+    suspend fun insert(flag: FlaggedWordEntity): Long
+
+    @Query("SELECT * FROM flagged_words WHERE sessionId = :sessionId ORDER BY flaggedAt, id")
+    fun observeForSession(sessionId: Long): Flow<List<FlaggedWordEntity>>
+
+    @Query("DELETE FROM flagged_words WHERE sessionId = :sessionId")
+    suspend fun deleteForSession(sessionId: Long)
+
+    @Query("DELETE FROM flagged_words")
+    suspend fun deleteAll()
+}

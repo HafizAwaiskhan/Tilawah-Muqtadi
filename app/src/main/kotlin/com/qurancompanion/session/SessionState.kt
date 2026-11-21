@@ -47,6 +47,10 @@ data class LiveSession(
     /** Gentle, non-blocking message (e.g. "Qari audio is not downloaded yet"). */
     val notice: String? = null,
     val summaryDismissed: Boolean = false,
+    /** Words flagged (surfaced mistakes) in the current/last session, in order. */
+    val flagged: List<FlaggedWord> = emptyList(),
+    /** "New session" is switching sessions: the STOPPED in between must not end the service. */
+    val restarting: Boolean = false,
 ) {
     val state: EngineState get() = engine.state
 
@@ -74,3 +78,15 @@ data class LiveSession(
 }
 
 fun WordPosition.toQuranPosition() = QuranPosition(surah, ayah, wordIndex)
+
+/** A flagged word of the live session (position + mistake type; never audio or transcript). */
+data class FlaggedWord(
+    val wordId: Int,
+    val surah: Int,
+    val ayah: Int,
+    /** 1-based. */
+    val wordIndex: Int,
+    /** Engine MistakeType name. */
+    val type: String,
+    val time: Long,
+)

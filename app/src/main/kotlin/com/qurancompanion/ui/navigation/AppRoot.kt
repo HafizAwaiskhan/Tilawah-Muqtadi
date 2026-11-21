@@ -34,6 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.qurancompanion.data.settings.SettingsRepository
+import com.qurancompanion.ui.history.HistoryDetailScreen
 import com.qurancompanion.ui.history.HistoryScreen
 import com.qurancompanion.ui.home.HomeScreen
 import com.qurancompanion.ui.onboarding.OnboardingScreen
@@ -55,10 +56,12 @@ object Routes {
     const val AYAHS = "quran/{surah}?ayah={ayah}"
     const val RECITATION = "recitation?surah={surah}&ayah={ayah}"
     const val HISTORY = "history"
+    const val HISTORY_DETAIL = "history/{id}"
     const val SETTINGS = "settings"
 
     fun ayahs(surah: Int, ayah: Int = -1) = "quran/$surah?ayah=$ayah"
     fun recitation(surah: Int = -1, ayah: Int = -1) = "recitation?surah=$surah&ayah=$ayah"
+    fun historyDetail(id: Long) = "history/$id"
 }
 
 @HiltViewModel
@@ -111,7 +114,8 @@ private fun MainScaffold(openRecitationRequest: Boolean, onOpenRecitationHandled
             NavigationBar {
                 topLevel.forEach { item ->
                     val selected = backStack?.destination?.hierarchy?.any { d ->
-                        d.route == item.route || (item.route == Routes.QURAN && d.route == Routes.AYAHS)
+                        d.route == item.route || (item.route == Routes.QURAN && d.route == Routes.AYAHS) ||
+                            (item.route == Routes.HISTORY && d.route == Routes.HISTORY_DETAIL)
                     } == true
                     NavigationBarItem(
                         selected = selected,
@@ -155,9 +159,21 @@ private fun MainScaffold(openRecitationRequest: Boolean, onOpenRecitationHandled
                     navArgument("ayah") { type = NavType.IntType; defaultValue = -1 },
                 ),
             ) {
-                RecitationScreen(onBack = { nav.popBackStack() })
+                RecitationScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenAyah = { s, a -> nav.navigate(Routes.ayahs(s, a)) },
+                )
             }
-            composable(Routes.HISTORY) { HistoryScreen() }
+            composable(Routes.HISTORY) { HistoryScreen(onOpenSession = { nav.navigate(Routes.historyDetail(it)) }) }
+            composable(
+                Routes.HISTORY_DETAIL,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) {
+                HistoryDetailScreen(
+                    onBack = { nav.popBackStack() },
+                    onOpenAyah = { s, a -> nav.navigate(Routes.ayahs(s, a)) },
+                )
+            }
             composable(Routes.SETTINGS) { SettingsScreen() }
         }
     }

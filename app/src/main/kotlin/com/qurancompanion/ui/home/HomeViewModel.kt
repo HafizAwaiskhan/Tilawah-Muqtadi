@@ -3,6 +3,7 @@ package com.qurancompanion.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qurancompanion.core.recognition.ModelReadiness
+import com.qurancompanion.core.qari.QariDownloadManager
 import com.qurancompanion.core.recognition.QuranRecognitionEngine
 import com.qurancompanion.data.db.SessionEntity
 import com.qurancompanion.data.db.SessionStatus
@@ -27,9 +28,9 @@ data class HomeUiState(
     val lastCompleted: SessionEntity? = null,
     val reference: ReferenceStatus = ReferenceStatus.Loading,
     val model: ModelReadiness = ModelReadiness.NotInstalled,
-    val qariInstalled: Boolean = false,
-) {
-}
+    /** Surahs of the Alafasy test audio on the device (hints stream when online otherwise). */
+    val qariSurahs: Int = 0,
+)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -37,6 +38,7 @@ class HomeViewModel @Inject constructor(
     private val sessions: SessionRepository,
     private val reference: QuranReferenceRepository,
     engine: QuranRecognitionEngine,
+    qari: QariDownloadManager,
 ) : ViewModel() {
 
     val state: StateFlow<HomeUiState> = combine(
@@ -44,7 +46,8 @@ class HomeViewModel @Inject constructor(
         sessions.observeSessions(),
         reference.status,
         engine.readiness,
-    ) { live, all, ref, model ->
+        qari.state,
+    ) { live, all, ref, model, q ->
         HomeUiState(
             live = live,
             resumable = all.firstOrNull { it.status.isResumable && it.id != live.sessionId }
@@ -52,8 +55,7 @@ class HomeViewModel @Inject constructor(
             lastCompleted = all.firstOrNull { it.status == SessionStatus.COMPLETED },
             reference = ref,
             model = model,
-            // INTEGRATION TODO(resources): ask the download manager whether the preferred Qari is installed.
-            qariInstalled = false,
+            qariSurahs = q.downloaded.size,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -66,6 +68,9 @@ class HomeViewModel @Inject constructor(
         manager.reset()
         manager.start(null)
     }
+
+    /** Ends the running session (saved) and starts a fresh one with automatic position detection. */
+    fun newSession() = manager.startNewSession()
 
     fun resume(sessionId: Long) {
         manager.reset()

@@ -2,7 +2,15 @@ package com.qurancompanion.di
 
 import android.content.Context
 import androidx.room.Room
-import com.qurancompanion.core.playback.NoDownloadedQariAudio
+import com.qurancompanion.core.cue.AndroidSessionCues
+import com.qurancompanion.core.cue.SessionCues
+import com.qurancompanion.core.net.AndroidNetworkStatus
+import com.qurancompanion.core.net.NetworkStatus
+import com.qurancompanion.core.playback.TestQariAudioResolver
+import com.qurancompanion.core.qari.AlafasyTestQari
+import com.qurancompanion.core.qari.AssetQariTimingSource
+import com.qurancompanion.core.qari.QariDownloadManager
+import com.qurancompanion.core.qari.QariTimingSource
 import com.qurancompanion.core.playback.QariAudioResolver
 import com.qurancompanion.core.playback.QuranAudioPlayback
 import com.qurancompanion.core.playback.QuranAudioPlaybackController
@@ -18,6 +26,7 @@ import com.qurancompanion.core.time.Clock
 import com.qurancompanion.core.time.SystemClockImpl
 import com.qurancompanion.data.db.AppDatabase
 import com.qurancompanion.data.db.BookmarkDao
+import com.qurancompanion.data.db.FlaggedWordDao
 import com.qurancompanion.data.db.SessionDao
 import com.qurancompanion.data.reference.CachedEngineReference
 import com.qurancompanion.data.reference.EngineReferenceSource
@@ -64,7 +73,9 @@ object AppProvidesModule {
 
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME).build()
+        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
+            .addMigrations(*AppDatabase.MIGRATIONS)
+            .build()
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Provides @Singleton @EngineDispatcher
@@ -73,6 +84,11 @@ object AppProvidesModule {
     @Provides @Singleton
     fun modelDownloads(@ApplicationContext context: Context, @ApplicationScope scope: CoroutineScope): ModelDownloadManager =
         ModelDownloadManager(File(context.filesDir, "models"), AsrModelSpec.ABDOU_V1, UrlConnectionHttpSource(), Dispatchers.IO, scope)
+
+    /** Alafasy test audio (personal testing only), filesDir/qari/alafasy-test/. */
+    @Provides @Singleton
+    fun qariDownloads(@ApplicationContext context: Context, @ApplicationScope scope: CoroutineScope): QariDownloadManager =
+        QariDownloadManager(File(context.filesDir, "qari/${AlafasyTestQari.ID}"), UrlConnectionHttpSource(), Dispatchers.IO, scope)
 
     /** One dedicated thread runs the ASR model (load, accept, flush). */
     @Provides @Singleton
@@ -87,6 +103,7 @@ object AppProvidesModule {
 
     @Provides fun sessionDao(db: AppDatabase): SessionDao = db.sessionDao()
     @Provides fun bookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
+    @Provides fun flaggedWordDao(db: AppDatabase): FlaggedWordDao = db.flaggedWordDao()
 }
 
 @Module
@@ -98,7 +115,10 @@ abstract class AppBindsModule {
     @Binds abstract fun bookmarks(impl: RoomBookmarkRepository): BookmarkRepository
     @Binds abstract fun reference(impl: SqliteQuranReferenceRepository): QuranReferenceRepository
     @Binds abstract fun playback(impl: QuranAudioPlaybackController): QuranAudioPlayback
-    @Binds abstract fun qariAudio(impl: NoDownloadedQariAudio): QariAudioResolver
+    @Binds abstract fun qariAudio(impl: TestQariAudioResolver): QariAudioResolver
+    @Binds abstract fun qariTimings(impl: AssetQariTimingSource): QariTimingSource
+    @Binds abstract fun network(impl: AndroidNetworkStatus): NetworkStatus
+    @Binds abstract fun cues(impl: AndroidSessionCues): SessionCues
 
     @Binds abstract fun engineReference(impl: CachedEngineReference): EngineReferenceSource
 

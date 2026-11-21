@@ -6,6 +6,7 @@ import com.qurancompanion.BuildConfig
 import com.qurancompanion.data.reference.QuranReferenceRepository
 import com.qurancompanion.data.settings.DeveloperSettings
 import com.qurancompanion.data.session.SessionRepository
+import com.qurancompanion.data.settings.MistakeHint
 import com.qurancompanion.data.settings.RecitationMode
 import com.qurancompanion.data.settings.SettingsRepository
 import com.qurancompanion.data.settings.UserSettings
@@ -45,7 +46,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setSmartAssistance(v: Boolean) = update { it.copy(smartAssistance = v) }
     fun setMode(v: RecitationMode) = update { it.copy(mode = v) }
-    fun setVibration(v: Boolean) = update { it.copy(vibration = v) }
+    fun setVibrateOnCue(v: Boolean) = update { it.copy(vibrateOnCue = v) }
+    fun setSoftTone(v: Boolean) = update { it.copy(softTone = v) }
+    fun setMarkFlaggedWords(v: Boolean) = update { it.copy(markFlaggedWords = v) }
+    fun setMistakeHint(v: MistakeHint) = update { it.copy(mistakeHint = v) }
     fun setPlaybackSpeed(v: Float) = update { it.copy(playbackSpeed = v.coerceIn(UserSettings.SPEED_RANGE)) }
     fun setPlaybackVolume(v: Float) = update { it.copy(playbackVolume = v.coerceIn(UserSettings.VOLUME_RANGE)) }
     fun setPreferredQari(id: String?) = update { it.copy(preferredQariId = id?.trim()?.ifEmpty { null }) }

@@ -1,6 +1,12 @@
 package com.qurancompanion.session
 
 import com.qurancompanion.core.audio.EnergyVad
+import com.qurancompanion.core.cue.NoSessionCues
+import com.qurancompanion.core.cue.SessionCues
+import com.qurancompanion.core.playback.QariAudioLookup
+import com.qurancompanion.data.db.FlaggedWordEntity
+import com.qurancompanion.data.settings.MistakeHint
+import com.qurancompanion.engine.session.OfferReason
 import com.qurancompanion.core.audio.InterruptionSignal
 import com.qurancompanion.core.playback.AyahAudio
 import com.qurancompanion.core.playback.PlaybackEvent
@@ -73,6 +79,9 @@ import javax.inject.Singleton
  *   the confirmed position or the session status changes, and on stop (process-death recovery).
  * - Hints: when the controller exposes an [HintRequest] the clip is resolved and played; with no
  *   Qari audio a gentle notice is shown and the session resumes immediately.
+ * - Mistakes: each surfaced mistake is persisted as a flagged word (position + type only) and,
+ *   with an automatic offer, triggers the gentle cues (vibration / soft tone) from here — not
+ *   from the UI — so they also work with the screen locked.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -86,6 +95,7 @@ class RecitationSessionManager @Inject constructor(
     private val recognizer: QuranRecognitionEngine,
     @ApplicationScope private val scope: CoroutineScope,
     @EngineDispatcher private val engineDispatcher: CoroutineDispatcher,
+    private val cues: SessionCues = NoSessionCues,
 ) {
     private val _state = MutableStateFlow(LiveSession())
     val state: StateFlow<LiveSession> = _state.asStateFlow()
@@ -171,7 +181,8 @@ class RecitationSessionManager @Inject constructor(
                 engine = a,
                 durationMs = (snap?.durationMs ?: s.durationMs) / 1000 * 1000,
                 interruption = if (a.state == EngineState.INTERRUPTED) s.interruption else null,
-                notice = if (a.confirmed != b.confirmed && b.confirmed != null) null else s.notice,
+                // A notice goes once the user recites on (not when a mistake hint resets the position).
+                notice = if (a.confirmed != b.confirmed && b.confirmed != null && b.state !in EngineState.PLAYING) null else s.notice,
             )
         }
         // New session row.
@@ -207,9 +218,52 @@ class RecitationSessionManager @Inject constructor(
         if (b.state in EngineState.PLAYING && a.state !in EngineState.PLAYING && a.state != EngineState.WAITING_FOR_RETRY) {
             scope.launch { if (playback.isPlaying.value) playback.stop() }
         }
+        if (a.state == EngineState.STARTING_SESSION && _state.value.restarting) _state.update { it.copy(restarting = false) }
+        // Newly surfaced mistakes → flagged words (Room + live list).
+        val newFlags = (a.feedbackCount - b.feedbackCount).coerceAtLeast(0)
+        if (newFlags > 0) recordFlags(a, newFlags)
+        val newOffer = a.pendingOffer != null && b.pendingOffer == null
         // Smart assistance off: never show unsolicited offers (the Lukma button still works).
-        if (a.pendingOffer != null && b.pendingOffer == null && !prefs.value.smartAssistance) {
-            process(c, SessionInput.DeclineOffer)
+        val declined = newOffer && !prefs.value.smartAssistance
+        if (newFlags > 0 || (newOffer && !declined)) cue()
+        if (declined) process(c, SessionInput.DeclineOffer)
+    }
+
+    /** Engine loop only. */
+    private fun recordFlags(a: SessionUiState, count: Int) {
+        val r = ref ?: return
+        val now = clock.nowMillis()
+        val added = a.feedback.takeLast(count).filter { it.wordId in 0 until r.wordCount }.map { m ->
+            val p = r.position(m.wordId)
+            FlaggedWord(m.wordId, p.surah, p.ayah, p.wordIndex, m.type.name, now)
+        }
+        if (added.isEmpty()) return
+        _state.update { it.copy(flagged = it.flagged + added) }
+        persistQueue.trySend {
+            val id = roomId ?: return@trySend
+            for (f in added) {
+                sessions.addFlag(
+                    FlaggedWordEntity(sessionId = id, surah = f.surah, ayah = f.ayah, wordIndex = f.wordIndex,
+                        mistakeType = f.type, flaggedAt = f.time)
+                )
+            }
+        }
+    }
+
+    /** Gentle cue for a surfaced mistake / offer, per Settings (honoured with the screen locked). */
+    private fun cue() {
+        val p = prefs.value
+        if (p.vibrateOnCue) runCatching { cues.vibrate() }
+        if (p.softTone) {
+            // Same isolation as a hint: close the audio gate before the tone, reopen after tone + tail.
+            tailJob?.cancel()
+            _state.update { it.copy(recognitionSuppressed = true) }
+            tailJob = scope.launch {
+                delay(TONE_LEAD_MS)
+                runCatching { cues.tone() }
+                delay(SessionCues.TONE_MS + PLAYBACK_TAIL_MS)
+                _state.update { it.copy(recognitionSuppressed = false) }
+            }
         }
     }
 
@@ -259,10 +313,36 @@ class RecitationSessionManager @Inject constructor(
      */
     fun start(requestedStart: QuranPosition? = null) {
         if (_state.value.status.isRunning) return
-        _state.update { it.copy(requestedStart = requestedStart, summaryDismissed = false, notice = null, sessionId = null, startPosition = null) }
+        startInternal(requestedStart)
+    }
+
+    private fun startInternal(requestedStart: QuranPosition?) {
+        _state.update {
+            it.copy(requestedStart = requestedStart, summaryDismissed = false, notice = null, sessionId = null,
+                startPosition = null, flagged = emptyList())
+        }
         recoverFromError()
         readyChain()
         send(SessionInput.StartSession(mode()))
+    }
+
+    /**
+     * "New session": ends the current (listening/paused/interrupted) session — saved to history like
+     * Stop — and starts a fresh one with automatic position detection. Without a running session it
+     * is a plain [start]. The service keeps running across the switch ([LiveSession.restarting]).
+     */
+    fun startNewSession() {
+        if (!_state.value.status.isRunning) {
+            reset()
+            return start(null)
+        }
+        _state.update { it.copy(restarting = true) }
+        val e = activeRecognizer
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            if (e != null) runCatching { e.flush() }
+            send(SessionInput.Stop)
+            startInternal(null)
+        }
     }
 
     private fun mode() = if (prefs.value.mode == RecitationMode.MEMORIZATION) PracticeMode.MEMORIZATION else PracticeMode.RECITATION
@@ -284,7 +364,7 @@ class RecitationSessionManager @Inject constructor(
             startLocated = true
             _state.update {
                 it.copy(sessionId = id, startPosition = QuranPosition(row.startSurah, row.startAyah),
-                    requestedStart = null, summaryDismissed = false, notice = null)
+                    requestedStart = null, summaryDismissed = false, notice = null, flagged = emptyList())
             }
             sessions.updateStatus(id, SessionStatus.ACTIVE, row.durationMs, null)
             recoverFromError()
@@ -432,7 +512,58 @@ class RecitationSessionManager @Inject constructor(
 
     /** User pressed Lukma: hint for the next word (repeated presses escalate word → phrase → ayah). */
     fun requestLukma(level: HintLevel? = null) = flushThen(SessionInput.RequestLukma(level))
-    fun acceptOffer(level: HintLevel? = null) = flushThen(SessionInput.AcceptOffer(level))
+    /**
+     * Accepts the pending offer. [level] null = the default: the smallest hint for a pause offer,
+     * Settings "On mistake, play" (full ayah / correct word only) for a mistake offer.
+     */
+    fun acceptOffer(level: HintLevel? = null) {
+        val e = activeRecognizer
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            if (e != null) runCatching { e.flush() }
+            onEngine { c, _ ->
+                val offer = c.uiState.value.pendingOffer
+                val chosen = level ?: if (offer?.reason == OfferReason.MISTAKE) mistakeHintLevel() else null
+                process(c, SessionInput.AcceptOffer(chosen))
+            }
+        }
+    }
+
+    private fun mistakeHintLevel() =
+        if (prefs.value.mistakeHint == MistakeHint.CORRECT_WORD) HintLevel.NEXT_WORD else HintLevel.FULL_AYAH
+
+    /**
+     * Tapped flagged word → "Play ayah". While listening this is a user-initiated hint for that
+     * ayah (recognition suppressed; tracking restarts at the ayah start afterwards). Otherwise
+     * (paused, stopped, still locating) the ayah is just played with the audio gate closed.
+     */
+    fun playFlaggedAyah(surah: Int, ayah: Int, wordIndex: Int) = onEngine { c, r ->
+        val range = r.ayahWords(surah, ayah) ?: return@onEngine
+        val wordId = (range.first + wordIndex - 1).coerceIn(range.first, range.last)
+        val st = c.currentState
+        if (st in EngineState.LISTENING && st != EngineState.LOCATING_POSITION) {
+            process(c, SessionInput.RequestLukma(HintLevel.FULL_AYAH, wordId))
+        } else if (st !in EngineState.PLAYING) {
+            scope.launch { playPreview(surah, ayah) }
+        }
+    }
+
+    private suspend fun playPreview(surah: Int, ayah: Int) {
+        when (val r = runCatching { qariAudio.resolve(prefs.value.preferredQariId, surah, ayah) }.getOrNull()) {
+            is QariAudioLookup.Available -> {
+                tailJob?.cancel()
+                _state.update { it.copy(recognitionSuppressed = true) }
+                playback.play(r.audio.uri, tag = "preview", startMs = r.audio.startMs, endMs = r.audio.endMs,
+                    speed = prefs.value.playbackSpeed, volume = prefs.value.playbackVolume)
+            }
+            else -> _state.update { it.copy(notice = noticeFor(r)) }
+        }
+    }
+
+    private fun noticeFor(r: QariAudioLookup?): String = when (r) {
+        QariAudioLookup.Offline -> "This ayah's audio is not downloaded and you're offline — carry on, I'm still listening."
+        is QariAudioLookup.Available -> "Word timings are not available for this Qari — carry on, I'm still listening."
+        else -> "Qari audio is not available — carry on, I'm still listening."
+    }
     fun declineOffer() = send(SessionInput.DeclineOffer)
 
     /** Stops a playing hint and returns to listening. */
@@ -444,13 +575,12 @@ class RecitationSessionManager @Inject constructor(
 
     private suspend fun playHint(h: HintRequest) {
         val p = prefs.value
-        val audio = runCatching { qariAudio.ayahAudio(p.preferredQariId, h.surah, h.ayah) }.getOrNull()
-        val clip = audio?.let { clipFor(it, h) }
+        val lookup = runCatching { qariAudio.resolve(p.preferredQariId, h.surah, h.ayah) }.getOrNull()
+        val audio = (lookup as? QariAudioLookup.Available)?.audio
+        // A mistake's "correct word" without word timings falls back to the whole ayah.
+        val clip = audio?.let { clipFor(it, h) ?: if (h.reason == OfferReason.MISTAKE) it.startMs to it.endMs else null }
         if (audio == null || clip == null) {
-            _state.update {
-                it.copy(notice = if (audio == null) "Qari audio is not downloaded yet — carry on, I'm still listening."
-                else "Word timings are not available for this Qari — carry on, I'm still listening.")
-            }
+            _state.update { it.copy(notice = noticeFor(lookup)) }
             send(SessionInput.PlaybackEnded)
             return
         }
@@ -466,6 +596,7 @@ class RecitationSessionManager @Inject constructor(
         val r = ref ?: return null
         val first = audio.wordTimings.getOrNull(r.word(h.wordIds.first).wordIndex - 1) ?: return null
         val last = audio.wordTimings.getOrNull(r.word(h.wordIds.last).wordIndex - 1) ?: return null
+        if (first.first < 0 || last.second < first.first) return null
         return first.first to last.second
     }
 
@@ -494,5 +625,7 @@ class RecitationSessionManager @Inject constructor(
     companion object {
         const val PLAYBACK_TAIL_MS = 300L
         const val TICK_MS = 250L
+        /** Gate closes this long before the soft tone starts, so no tone frame reaches the recognizer. */
+        const val TONE_LEAD_MS = 60L
     }
 }

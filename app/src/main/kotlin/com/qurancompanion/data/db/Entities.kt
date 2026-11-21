@@ -1,6 +1,7 @@
 package com.qurancompanion.data.db
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -43,4 +44,30 @@ data class BookmarkEntity(
     val ayah: Int,
     val createdAt: Long,
     val label: String? = null,
+)
+
+/**
+ * A word flagged in a session: a mistake the feedback policy surfaced. Position and type only —
+ * **no audio, no transcript** (the recognized text is never stored). Deleted with its session.
+ */
+@Entity(
+    tableName = "flagged_words",
+    foreignKeys = [
+        ForeignKey(
+            entity = SessionEntity::class, parentColumns = ["id"], childColumns = ["sessionId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("sessionId")],
+)
+data class FlaggedWordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long,
+    val surah: Int,
+    val ayah: Int,
+    /** 1-based word index within the ayah. */
+    val wordIndex: Int,
+    /** Engine MistakeType name (SUBSTITUTION, DELETION, ORDER, INSERTION). */
+    val mistakeType: String,
+    val flaggedAt: Long,
 )

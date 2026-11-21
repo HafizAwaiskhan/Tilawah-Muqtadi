@@ -6,7 +6,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.mp3.Mp3Extractor
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +78,17 @@ class QuranAudioPlaybackController @Inject constructor(
         _events.tryEmit(PlaybackEvent.Ended(tag, android.os.SystemClock.elapsedRealtime(), error))
     }
 
-    private fun obtainPlayer(): ExoPlayer = player ?: ExoPlayer.Builder(context)
+    // Exact seeking in MP3s (local files and streams) so word clips start on the right word.
+    @androidx.annotation.OptIn(markerClass = [UnstableApi::class])
+    private fun obtainPlayer(): ExoPlayer = player ?: ExoPlayer.Builder(
+        context,
+        DefaultMediaSourceFactory(
+            context,
+            DefaultExtractorsFactory()
+                .setConstantBitrateSeekingEnabled(true)
+                .setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING),
+        ),
+    )
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)

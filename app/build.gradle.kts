@@ -1,3 +1,6 @@
+import groovy.json.JsonSlurper
+import java.util.zip.GZIPInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,6 +18,35 @@ val copyReferenceDb by tasks.registering(Copy::class) {
         // Missing file is fine: the app shows "reference data not installed".
     }
     into(generatedRefAssets)
+}
+
+// Alafasy word timings for the *test* Qari download (licence UNVERIFIED, docs/LICENSES.md rows 8-9):
+// converted from data/raw segments into a debug-only asset. Never part of release builds or the DB.
+val qariSegmentsDir = rootProject.layout.projectDirectory.dir("data/raw/quran_com_api_v4/segments_recitation7").asFile
+val generatedQariTestAssets = layout.buildDirectory.dir("generated/qariTestAssets")
+val buildQariTestTimings by tasks.registering {
+    val srcDir = qariSegmentsDir
+    val outDir = generatedQariTestAssets
+    inputs.files(fileTree(srcDir) { include("*.json.gz") })
+    outputs.dir(outDir)
+    doLast {
+        val out = outDir.get().file("qari/alafasy_timings.tsv").asFile
+        out.parentFile.mkdirs()
+        val files = srcDir.listFiles { f -> f.name.endsWith(".json.gz") }?.sortedBy { it.name }.orEmpty()
+        out.bufferedWriter().use { w ->
+            for (f in files) {
+                val json = GZIPInputStream(f.inputStream()).use { JsonSlurper().parse(it) } as Map<*, *>
+                for (af in json["audio_files"] as List<*>) {
+                    af as Map<*, *>
+                    val segs = (af["segments"] as List<*>).mapNotNull { seg ->
+                        val l = seg as List<*>
+                        if (l.size != 4) null else "${l[1]}:${l[2]}:${l[3]}"
+                    }
+                    if (segs.isNotEmpty()) w.write("${af["verse_key"]}\t${segs.joinToString(",")}\n")
+                }
+            }
+        }
+    }
 }
 
 android {
@@ -58,6 +90,7 @@ android {
     }
     sourceSets {
         getByName("main").assets.srcDir(generatedRefAssets)
+        getByName("debug").assets.srcDir(generatedQariTestAssets)
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -79,7 +112,7 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-tasks.named("preBuild") { dependsOn(copyReferenceDb) }
+tasks.named("preBuild") { dependsOn(copyReferenceDb, buildQariTestTimings) }
 
 dependencies {
     implementation(project(":engine"))

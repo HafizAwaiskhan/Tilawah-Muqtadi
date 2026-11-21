@@ -22,7 +22,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +37,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qurancompanion.core.model.AsrModelSpec
 import com.qurancompanion.data.settings.RecitationMode
+import com.qurancompanion.core.qari.AlafasyTestQari
+import com.qurancompanion.data.settings.MistakeHint
 import com.qurancompanion.ui.components.ModelDownloadCard
+import com.qurancompanion.ui.components.QariDownloadCard
 import com.qurancompanion.data.settings.UserSettings
 import java.util.Locale
 
@@ -67,26 +69,33 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
                 ) { Text(if (mode == RecitationMode.RECITATION) "Recitation" else "Memorization") }
             }
         }
-        SwitchRow("Vibration", "Vibrate softly when assistance is offered.", s.vibration, vm::setVibration)
+        Text("On mistake, play", style = MaterialTheme.typography.titleSmall)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            MistakeHint.entries.forEachIndexed { i, h ->
+                SegmentedButton(
+                    selected = s.mistakeHint == h,
+                    onClick = { vm.setMistakeHint(h) },
+                    shape = SegmentedButtonDefaults.itemShape(i, MistakeHint.entries.size),
+                ) { Text(if (h == MistakeHint.FULL_AYAH) "Full ayah" else "Correct word only") }
+            }
+        }
+        SwitchRow("Mark flagged words in text", "Underline words that may have been recited differently; tap one to see the expected word.",
+            s.markFlaggedWords, vm::setMarkFlaggedWords)
+        SwitchRow("Gentle vibration on mistake / Lukma offer", "A short, soft pattern. Follows your phone's silent mode.",
+            s.vibrateOnCue, vm::setVibrateOnCue)
+        SwitchRow("Soft tone on mistake / Lukma offer", "A short quiet beep through your earbuds or speaker. Listening pauses for it.",
+            s.softTone, vm::setSoftTone)
 
         Section("Offline downloads")
         ModelDownloadCard()
+        QariDownloadCard()
 
         Section("Qari audio")
         SliderRow("Playback speed", s.playbackSpeed, UserSettings.SPEED_RANGE, steps = 9,
             label = { String.format(Locale.ROOT, "%.1f×", it) }, onChange = vm::setPlaybackSpeed)
         SliderRow("Playback volume", s.playbackVolume, UserSettings.VOLUME_RANGE, steps = 9,
             label = { "${(it * 100).toInt()}%" }, onChange = vm::setPlaybackVolume)
-        var qari by remember(s.preferredQariId) { mutableStateOf(s.preferredQariId.orEmpty()) }
-        OutlinedTextField(
-            value = qari,
-            onValueChange = { qari = it },
-            label = { Text("Preferred Qari id") },
-            supportingText = { Text("Qari audio downloads are not available yet.") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        LaunchedEffect(qari) { if (qari != s.preferredQariId.orEmpty()) vm.setPreferredQari(qari) }
+        Text("Qari: ${AlafasyTestQari.TITLE}", style = MaterialTheme.typography.bodySmall)
 
         Section("Privacy")
         SwitchRow("Keep session history", "Positions and durations only — audio is never stored.",

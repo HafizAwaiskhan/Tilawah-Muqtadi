@@ -33,7 +33,10 @@ class DataStoreSettingsRepository @Inject constructor(
         val onboarding = booleanPreferencesKey("onboarding_completed")
         val smartAssistance = booleanPreferencesKey("smart_assistance")
         val mode = stringPreferencesKey("mode")
-        val vibration = booleanPreferencesKey("vibration")
+        val vibration = booleanPreferencesKey("vibration") // kept: same meaning as the old "Vibration" switch
+        val softTone = booleanPreferencesKey("soft_tone")
+        val markFlagged = booleanPreferencesKey("mark_flagged_words")
+        val mistakeHint = stringPreferencesKey("mistake_hint")
         val speed = floatPreferencesKey("playback_speed")
         val volume = floatPreferencesKey("playback_volume")
         val qari = stringPreferencesKey("preferred_qari_id")
@@ -55,7 +58,10 @@ class DataStoreSettingsRepository @Inject constructor(
             prefs[Keys.onboarding] = updated.onboardingCompleted
             prefs[Keys.smartAssistance] = updated.smartAssistance
             prefs[Keys.mode] = updated.mode.name
-            prefs[Keys.vibration] = updated.vibration
+            prefs[Keys.vibration] = updated.vibrateOnCue
+            prefs[Keys.softTone] = updated.softTone
+            prefs[Keys.markFlagged] = updated.markFlaggedWords
+            prefs[Keys.mistakeHint] = updated.mistakeHint.name
             prefs[Keys.speed] = updated.playbackSpeed.coerceIn(UserSettings.SPEED_RANGE)
             prefs[Keys.volume] = updated.playbackVolume.coerceIn(UserSettings.VOLUME_RANGE)
             if (updated.preferredQariId.isNullOrBlank()) prefs.remove(Keys.qari) else prefs[Keys.qari] = updated.preferredQariId
@@ -77,7 +83,10 @@ class DataStoreSettingsRepository @Inject constructor(
             onboardingCompleted = this[Keys.onboarding] ?: d.onboardingCompleted,
             smartAssistance = this[Keys.smartAssistance] ?: d.smartAssistance,
             mode = this[Keys.mode]?.let { runCatching { RecitationMode.valueOf(it) }.getOrNull() } ?: d.mode,
-            vibration = this[Keys.vibration] ?: d.vibration,
+            vibrateOnCue = this[Keys.vibration] ?: d.vibrateOnCue,
+            softTone = this[Keys.softTone] ?: d.softTone,
+            markFlaggedWords = this[Keys.markFlagged] ?: d.markFlaggedWords,
+            mistakeHint = this[Keys.mistakeHint]?.let { runCatching { MistakeHint.valueOf(it) }.getOrNull() } ?: d.mistakeHint,
             playbackSpeed = this[Keys.speed] ?: d.playbackSpeed,
             playbackVolume = this[Keys.volume] ?: d.playbackVolume,
             preferredQariId = this[Keys.qari],

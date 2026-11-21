@@ -204,6 +204,8 @@ class AbdouRecognitionEngineTest {
         e.startListening(frames(20))
         e.awaitFrames(20)
         withTimeout(5_000) { while (statuses.none { it is RecognizerStatus.Error }) delay(5) }
+        withTimeout(5_000) { while (fake.captureTimes.size < 19) delay(5) } // last frame may still be in flight
+        delay(50)
         assertEquals(19, fake.captureTimes.size) // the failing frame only
         j.cancel()
     }

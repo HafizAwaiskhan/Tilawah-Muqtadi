@@ -102,7 +102,7 @@ class RecitationService : LifecycleService() {
         }
         lifecycleScope.launch {
             manager.state
-                .map { NotificationModel(it.status, positionText(it)) }
+                .map { NotificationModel(it.status, positionText(it), it.restarting) }
                 .distinctUntilChanged()
                 .collect { model ->
                     // A resumed session is restored asynchronously, so IDLE only ends the
@@ -110,7 +110,10 @@ class RecitationService : LifecycleService() {
                     if (model.status.isRunning) seenRunning = true
                     // The session is started asynchronously (engine loop), so a previous STOPPED/IDLE
                     // state only ends the service once this session has actually been running.
-                    if (seenRunning && (model.status == ListeningStatus.STOPPED || model.status == ListeningStatus.IDLE)) {
+                    // "New session" passes through STOPPED while restarting: keep the service.
+                    if (seenRunning && !model.restarting &&
+                        (model.status == ListeningStatus.STOPPED || model.status == ListeningStatus.IDLE)
+                    ) {
                         stopSelf()
                     } else {
                         getSystemService(NotificationManager::class.java)
@@ -131,7 +134,7 @@ class RecitationService : LifecycleService() {
     private fun positionText(state: LiveSession): String =
         state.engine.confirmed?.let { "Position ${state.position.label()}" } ?: "Finding your position…"
 
-    private data class NotificationModel(val status: ListeningStatus, val position: String)
+    private data class NotificationModel(val status: ListeningStatus, val position: String, val restarting: Boolean)
 
     private fun buildNotification(state: LiveSession): Notification {
         val title = when (state.status) {

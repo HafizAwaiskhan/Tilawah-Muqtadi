@@ -2,14 +2,23 @@ package com.qurancompanion.data.settings
 
 enum class RecitationMode { RECITATION, MEMORIZATION }
 
+/** "On mistake, play": what an accepted mistake offer plays. */
+enum class MistakeHint { FULL_AYAH, CORRECT_WORD }
+
 data class UserSettings(
     val onboardingCompleted: Boolean = false,
     val smartAssistance: Boolean = true,
     val mode: RecitationMode = RecitationMode.RECITATION,
-    val vibration: Boolean = true,
+    /** Gentle vibration on a surfaced mistake / Lukma offer (replaces the former generic "Vibration"). */
+    val vibrateOnCue: Boolean = true,
+    /** Short quiet tone on a surfaced mistake / Lukma offer; recognition is suppressed meanwhile. */
+    val softTone: Boolean = false,
+    /** Underline flagged (surfaced) words in the ayah text; tap shows the expected word. */
+    val markFlaggedWords: Boolean = true,
+    val mistakeHint: MistakeHint = MistakeHint.FULL_AYAH,
     val playbackSpeed: Float = 1.0f,
     val playbackVolume: Float = 1.0f,
-    /** Identifier of the preferred Qari audio set; null until a Qari resource is installed. */
+    /** Identifier of the preferred Qari audio set; null = the default (Alafasy test download). */
     val preferredQariId: String? = null,
     val keepHistory: Boolean = true,
     /** Debug builds only (Settings → Developer). Ignored in release builds. */

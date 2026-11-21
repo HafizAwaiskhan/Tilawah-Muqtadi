@@ -2,6 +2,8 @@ package com.qurancompanion.data.session
 
 import com.qurancompanion.data.db.BookmarkDao
 import com.qurancompanion.data.db.BookmarkEntity
+import com.qurancompanion.data.db.FlaggedWordDao
+import com.qurancompanion.data.db.FlaggedWordEntity
 import com.qurancompanion.data.db.SessionDao
 import com.qurancompanion.data.db.SessionEntity
 import com.qurancompanion.data.db.SessionStatus
@@ -19,8 +21,12 @@ interface SessionRepository {
     /** Sets the start ayah once the engine has located where the user actually began. */
     suspend fun updateStart(id: Long, surah: Int, ayah: Int)
     suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?)
+    /** Deletes the session and its flagged words. */
     suspend fun delete(id: Long)
     suspend fun deleteAll()
+    /** Records a flagged word (position + mistake type only) for session [FlaggedWordEntity.sessionId]. */
+    suspend fun addFlag(flag: FlaggedWordEntity)
+    fun observeFlags(sessionId: Long): Flow<List<FlaggedWordEntity>>
 }
 
 interface BookmarkRepository {
@@ -30,7 +36,10 @@ interface BookmarkRepository {
 }
 
 @Singleton
-class RoomSessionRepository @Inject constructor(private val dao: SessionDao) : SessionRepository {
+class RoomSessionRepository @Inject constructor(
+    private val dao: SessionDao,
+    private val flags: FlaggedWordDao,
+) : SessionRepository {
     override fun observeSessions() = dao.observeAll()
     override fun observeLatestUnfinished() = dao.observeLatestUnfinished()
     override suspend fun latestUnfinished() = dao.latestUnfinished()
@@ -41,8 +50,11 @@ class RoomSessionRepository @Inject constructor(private val dao: SessionDao) : S
     override suspend fun updateStart(id: Long, surah: Int, ayah: Int) = dao.updateStart(id, surah, ayah)
     override suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?) =
         dao.updateStatus(id, status, durationMs, endedAt)
-    override suspend fun delete(id: Long) = dao.delete(id)
-    override suspend fun deleteAll() = dao.deleteAll()
+    // The foreign key cascades too; the explicit delete keeps it correct even with FKs off.
+    override suspend fun delete(id: Long) { flags.deleteForSession(id); dao.delete(id) }
+    override suspend fun deleteAll() { flags.deleteAll(); dao.deleteAll() }
+    override suspend fun addFlag(flag: FlaggedWordEntity) { flags.insert(flag) }
+    override fun observeFlags(sessionId: Long) = flags.observeForSession(sessionId)
 }
 
 @Singleton

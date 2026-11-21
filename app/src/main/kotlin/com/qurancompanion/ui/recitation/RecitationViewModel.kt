@@ -10,7 +10,10 @@ import com.qurancompanion.data.reference.EngineReferenceSource
 import com.qurancompanion.data.reference.QuranPosition
 import com.qurancompanion.data.reference.QuranReferenceRepository
 import com.qurancompanion.data.reference.SurahInfo
+import com.qurancompanion.data.settings.MistakeHint
 import com.qurancompanion.data.settings.SettingsRepository
+import com.qurancompanion.engine.session.OfferReason
+import com.qurancompanion.session.FlaggedWord
 import com.qurancompanion.engine.align.CandidateMistake
 import com.qurancompanion.engine.align.MistakeType
 import com.qurancompanion.engine.reference.WordPosition
@@ -45,7 +48,8 @@ data class RecitationUiState(
     val nextAyah: AyahText? = null,
     val model: ModelReadiness = ModelReadiness.NotInstalled,
     val smartAssistance: Boolean = true,
-    val vibration: Boolean = true,
+    val markFlaggedWords: Boolean = true,
+    val mistakeHint: MistakeHint = MistakeHint.FULL_AYAH,
     val requestedStart: QuranPosition? = null,
     val feedback: FeedbackNote? = null,
 ) {
@@ -90,6 +94,17 @@ data class RecitationUiState(
         }
 
     val showOffer: Boolean get() = session.engine.pendingOffer != null && engineState == EngineState.WAITING_FOR_CONFIRMATION
+    val offerIsMistake: Boolean get() = session.engine.pendingOffer?.reason == OfferReason.MISTAKE
+
+    /** 1-based indexes of flagged words in [a] (empty when marking is off). */
+    fun flaggedIn(a: AyahText?): Set<Int> {
+        if (!markFlaggedWords || a == null) return emptySet()
+        return session.flagged.filter { it.surah == a.surah && it.ayah == a.ayah }.map { it.wordIndex }.toSet()
+    }
+
+    /** The flagged entry for a tapped word (for the "expected word" dialog). */
+    fun flagAt(surah: Int, ayah: Int, word: Int): FlaggedWord? =
+        session.flagged.lastOrNull { it.surah == surah && it.ayah == ayah && it.wordIndex == word }
     val canRequestLukma: Boolean
         get() = engineState in EngineState.LISTENING && engineState != EngineState.LOCATING_POSITION
     /** Without a recognition model the position is moved by hand. */
@@ -156,7 +171,8 @@ class RecitationViewModel @Inject constructor(
             nextAyah = next,
             model = model,
             smartAssistance = prefs.smartAssistance,
-            vibration = prefs.vibration,
+            markFlaggedWords = prefs.markFlaggedWords,
+            mistakeHint = prefs.mistakeHint,
             requestedStart = requestedStart,
             feedback = feedback,
         )
@@ -176,8 +192,13 @@ class RecitationViewModel @Inject constructor(
     fun resume() = manager.resume()
     fun stop() = manager.stop()
     fun lukma() = manager.requestLukma()
-    fun playHint() = manager.acceptOffer(HintLevel.NEXT_WORD)
+    /** Main offer button: pause → next word; mistake → Settings "On mistake, play". */
+    fun playHint() = if (state.value.offerIsMistake) manager.acceptOffer(null) else manager.acceptOffer(HintLevel.NEXT_WORD)
     fun playFullAyah() = manager.acceptOffer(HintLevel.FULL_AYAH)
+    fun playCorrectWord() = manager.acceptOffer(HintLevel.NEXT_WORD)
+    /** Ends the current session (saved) and starts a fresh one with automatic position detection. */
+    fun newSession() = manager.startNewSession()
+    fun playFlaggedAyah(f: FlaggedWord) = manager.playFlaggedAyah(f.surah, f.ayah, f.wordIndex)
     fun continueReciting() = manager.declineOffer()
     fun stopHint() = manager.stopHint()
     fun dismissNotice() = manager.dismissNotice()

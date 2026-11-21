@@ -1,5 +1,6 @@
 package com.qurancompanion.ui.history
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -37,7 +38,7 @@ import com.qurancompanion.ui.components.formatTimestamp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(vm: HistoryViewModel = hiltViewModel()) {
+fun HistoryScreen(onOpenSession: (Long) -> Unit = {}, vm: HistoryViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var confirmDeleteAll by rememberSaveable { mutableStateOf(false) }
     Scaffold(
@@ -65,6 +66,7 @@ fun HistoryScreen(vm: HistoryViewModel = hiltViewModel()) {
                     items(state.sessions, key = { it.id }) { s ->
                         val live = s.id == state.liveSessionId
                         ListItem(
+                            modifier = Modifier.clickable { onOpenSession(s.id) },
                             headlineContent = {
                                 Text(
                                     "${QuranPosition(s.startSurah, s.startAyah).label()} → " +

@@ -22,6 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.qurancompanion.ui.recitation.NewSessionDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,6 +47,13 @@ fun HomeScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val starter = rememberRecitationStarter()
+    var confirmNew by remember { mutableStateOf(false) }
+    if (confirmNew) {
+        NewSessionDialog(
+            onConfirm = { starter.start { vm.newSession(); onOpenRecitation() } },
+            onDismiss = { confirmNew = false },
+        )
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -58,7 +69,10 @@ fun HomeScreen(
                         (state.live.engine.confirmed?.let { "At ${state.live.position.label()}" } ?: "Finding your position") +
                             " · ${state.live.status.name.lowercase()}"
                     )
-                    Button(onClick = onOpenRecitation, Modifier.padding(top = 8.dp)) { Text("Open session") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        Button(onClick = onOpenRecitation) { Text("Open session") }
+                        OutlinedButton(onClick = { confirmNew = true }) { Text("New session") }
+                    }
                 }
             }
         } else {
@@ -127,7 +141,12 @@ fun HomeScreen(
                     },
                     state.model.isReady,
                 )
-                ReadinessRow("Qari audio (hints)", if (state.qariInstalled) "Installed" else "Not downloaded yet", state.qariInstalled)
+                ReadinessRow(
+                    "Qari audio (hints) — testing only",
+                    if (state.qariSurahs > 0) "Alafasy: ${state.qariSurahs} of 114 surahs on this phone (others stream when online)"
+                    else "Not downloaded — hints stream when online (Settings → Offline downloads)",
+                    state.qariSurahs > 0,
+                )
                 OutlinedButton(onClick = onOpenQuran) { Text("Open the Quran") }
             }
         }

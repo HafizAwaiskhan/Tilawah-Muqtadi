@@ -26,12 +26,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import com.qurancompanion.data.settings.MistakeHint
+import com.qurancompanion.session.FlaggedWord
+import com.qurancompanion.ui.components.FlaggedWordList
+import com.qurancompanion.ui.components.mistakeLabel
+import com.qurancompanion.ui.theme.QuranTextStyle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -47,18 +52,18 @@ import com.qurancompanion.ui.components.rememberRecitationStarter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel()) {
+fun RecitationScreen(
+    onBack: () -> Unit,
+    onOpenAyah: (surah: Int, ayah: Int) -> Unit = { _, _ -> },
+    vm: RecitationViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val starter = rememberRecitationStarter()
     val session = state.session
     val status = session.status
-    val context = LocalContext.current
-    LaunchedEffect(state.showOffer) {
-        if (state.showOffer && state.vibration) {
-            context.getSystemService(Vibrator::class.java)
-                ?.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
-    }
+    // Vibration / tone cues are played by the session manager (also with the screen locked).
+    var flagDialog by remember { mutableStateOf<Pair<FlaggedWord, String>?>(null) }
+    var confirmNew by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -111,6 +116,8 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                             highlightWord = state.highlightWord,
                             ayahNumber = ayah.ayah,
                             onWordClick = if (status.isRunning) { w -> vm.tapWord(ayah.surah, ayah.ayah, w.index) } else null,
+                            flaggedWords = state.flaggedIn(ayah),
+                            onFlaggedClick = { w -> state.flagAt(ayah.surah, ayah.ayah, w.index)?.let { flagDialog = it to w.text } },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -134,6 +141,8 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                             words = next.words,
                             ayahNumber = next.ayah,
                             onWordClick = { w -> vm.tapWord(next.surah, next.ayah, w.index) },
+                            flaggedWords = state.flaggedIn(next),
+                            onFlaggedClick = { w -> state.flagAt(next.surah, next.ayah, w.index)?.let { flagDialog = it to w.text } },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -149,6 +158,11 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                         val start = session.startPosition?.let { "${it.surah}:${it.ayah}" } ?: "—"
                         val end = session.engine.confirmed?.let { "${it.surah}:${it.ayah} · word ${it.wordIndex}" } ?: "—"
                         Text("Session saved: $start → $end, " + formatDuration(session.durationMs))
+                        FlaggedWordList(
+                            session.flagged.map { Triple(it.surah, it.ayah, it.wordIndex to it.type) },
+                            onOpenAyah = onOpenAyah,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                     Button(
                         onClick = { starter.start { vm.start() } },
@@ -171,6 +185,7 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                         }
                         OutlinedButton(onClick = vm::stop, Modifier.weight(1f)) { Text("Stop") }
                     }
+                    TextButton(onClick = { confirmNew = true }) { Text("New session") }
                     FilledTonalButton(
                         onClick = vm::lukma,
                         enabled = state.canRequestLukma,
@@ -180,6 +195,37 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
             }
         }
     }
+    flagDialog?.let { (f, text) ->
+        FlagDialog(f, text, canPlay = true, onPlay = { vm.playFlaggedAyah(f) }, onDismiss = { flagDialog = null })
+    }
+    if (confirmNew) NewSessionDialog(onConfirm = { starter.start { vm.newSession() } }, onDismiss = { confirmNew = false })
+}
+
+@Composable
+private fun FlagDialog(flag: FlaggedWord, expected: String, canPlay: Boolean, onPlay: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${flag.surah}:${flag.ayah} · word ${flag.wordIndex}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(mistakeLabel(flag.type) + ". The expected word is:")
+                Text(expected, style = QuranTextStyle, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { if (canPlay) TextButton(onClick = { onDismiss(); onPlay() }) { Text("Play the ayah") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+fun NewSessionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Start a new session?") },
+        text = { Text("The current session ends and is saved to history. The new one finds your position from your recitation.") },
+        confirmButton = { TextButton(onClick = { onDismiss(); onConfirm() }) { Text("New session") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -194,6 +240,22 @@ private fun AssistanceCard(state: RecitationUiState, vm: RecitationViewModel) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when {
+                state.showOffer && state.offerIsMistake -> {
+                    val f = session.flagged.lastOrNull()
+                    Text("Check this ayah?", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        (f?.let { "${mistakeLabel(it.type)} — word ${it.wordIndex} of ${it.surah}:${it.ayah}. " } ?: "") +
+                            "Hear it from the Qari? Recognition pauses while it plays; then recite the ayah again from its start."
+                    )
+                    val wordFirst = state.mistakeHint == MistakeHint.CORRECT_WORD
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = vm::playHint) { Text(if (wordFirst) "Play the correct word" else "Play the ayah") }
+                        OutlinedButton(onClick = if (wordFirst) vm::playFullAyah else vm::playCorrectWord) {
+                            Text(if (wordFirst) "Full ayah" else "Word only")
+                        }
+                    }
+                    TextButton(onClick = vm::continueReciting) { Text("Continue") }
+                }
                 state.showOffer -> {
                     Text("Would you like a hint?", style = MaterialTheme.typography.titleMedium)
                     Text("Your position stays where it is. Recognition pauses while the hint plays.")

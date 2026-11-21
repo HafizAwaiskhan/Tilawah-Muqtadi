@@ -2,7 +2,10 @@ package com.qurancompanion
 
 import com.qurancompanion.core.playback.AyahAudio
 import com.qurancompanion.core.playback.PlaybackEvent
+import com.qurancompanion.core.playback.QariAudioLookup
 import com.qurancompanion.core.playback.QariAudioResolver
+import com.qurancompanion.core.cue.SessionCues
+import com.qurancompanion.data.db.FlaggedWordEntity
 import com.qurancompanion.core.playback.QuranAudioPlayback
 import com.qurancompanion.core.time.Clock
 import com.qurancompanion.data.db.SessionEntity
@@ -64,8 +67,14 @@ class FakeSessionRepository : SessionRepository {
         edit(id) { it.copy(startSurah = surah, startAyah = ayah) }
     override suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?) =
         edit(id) { it.copy(status = status, durationMs = durationMs, endedAt = endedAt) }
-    override suspend fun delete(id: Long) { rows.value = rows.value.filterNot { it.id == id } }
-    override suspend fun deleteAll() { rows.value = emptyList() }
+    val flags = MutableStateFlow<List<FlaggedWordEntity>>(emptyList())
+    override suspend fun delete(id: Long) {
+        rows.value = rows.value.filterNot { it.id == id }
+        flags.value = flags.value.filterNot { it.sessionId == id }
+    }
+    override suspend fun deleteAll() { rows.value = emptyList(); flags.value = emptyList() }
+    override suspend fun addFlag(flag: FlaggedWordEntity) { flags.value = flags.value + flag.copy(id = flags.value.size + 1L) }
+    override fun observeFlags(sessionId: Long): Flow<List<FlaggedWordEntity>> = flags.map { l -> l.filter { it.sessionId == sessionId } }
 }
 
 class FakeSettingsRepository(initial: UserSettings = UserSettings()) : SettingsRepository {
@@ -94,8 +103,19 @@ class FakePlayback : QuranAudioPlayback {
     override fun release() = Unit
 }
 
-class FakeQariAudio(var audio: AyahAudio? = null) : QariAudioResolver {
-    override suspend fun ayahAudio(qariId: String?, surah: Int, ayah: Int) = audio
+class FakeQariAudio(var audio: AyahAudio? = null, var offline: Boolean = false) : QariAudioResolver {
+    val requests = mutableListOf<Pair<Int, Int>>()
+    override suspend fun resolve(qariId: String?, surah: Int, ayah: Int): QariAudioLookup {
+        requests += surah to ayah
+        return audio?.let { QariAudioLookup.Available(it) } ?: if (offline) QariAudioLookup.Offline else QariAudioLookup.Unavailable
+    }
+}
+
+class FakeCues : SessionCues {
+    var vibrations = 0
+    var tones = 0
+    override fun vibrate() { vibrations++ }
+    override fun tone() { tones++ }
 }
 
 /** Recognizer that emits nothing by itself; tests push events through [emit]. */
