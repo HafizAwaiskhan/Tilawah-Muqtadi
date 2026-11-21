@@ -29,7 +29,7 @@ must be compiled with Kotlin metadata ≤ 2.2, so mid-2025 AndroidX releases are
 | Navigation Compose | 2.9.3 · Lifecycle 2.9.2 · Activity 1.10.1 · Core 1.16.0 |
 | Hilt | 2.56.2 (KSP) · hilt-navigation-compose 1.2.0 |
 | Room | 2.7.2 (KSP, schema exported to `app/schemas/`) · DataStore 1.1.7 |
-| Media3 ExoPlayer | 1.8.0 · ONNX Runtime Android 1.22.0 (dependency only) |
+| Media3 ExoPlayer | 1.8.0 · ONNX Runtime Android **1.26.0** (dependency only; ≥ 1.25.1 required — 1.22–1.24 give wrong, thread-count-dependent output on the quran-asr-small INT8 model; ORT 1.26 AAR still has minSdk ≤ 26) |
 
 Upgrading past these needs Gradle 9 + AGP 9 + Kotlin ≥ 2.2 together.
 
@@ -45,7 +45,7 @@ The reference DB `data/build/quran_ref_v1.db` is **not duplicated** under `app/`
 dir) before every build; it is stored uncompressed (`noCompress "db"`). If the file is missing
 the build still succeeds and the app shows "Quran text not included in this build".
 
-APK size is ~115 MB, almost all ONNX Runtime native libs for 4 ABIs + the 18 MB DB. Add
+APK size is ~154 MB (ORT 1.26), almost all ONNX Runtime native libs for 4 ABIs + the 18 MB DB. Add
 `abiFilters` / App Bundle splits before release.
 
 ## Package layout (`com.qurancompanion`)
@@ -55,25 +55,74 @@ QuranCompanionApp, MainActivity        Hilt app + single activity (Compose)
 core/audio/        AudioCapture (AudioRecord 16 kHz mono PCM16, VOICE_RECOGNITION, AEC,
                    silenced-recording callback), AudioInterruptionMonitor (audio focus,
                    ACTION_AUDIO_BECOMING_NOISY, call detection via audio-mode listener API 31+)
-core/recognition/  QuranRecognitionEngine interface, ModelReadiness, local RecognitionEvent,
-                   UnavailableRecognitionEngine (drains audio, emits nothing)
+core/audio/        + EnergyVad (RMS VAD, adaptive noise floor, 60 ms attack / 400 ms hangover)
+core/recognition/  QuranRecognitionEngine (emits engine RecognitionEvent/Token), ModelReadiness,
+                   UnavailableRecognitionEngine (drains audio, emits nothing),
+                   SelectableRecognitionEngine (real engine, or debug simulator per Settings)
 core/playback/     QuranAudioPlaybackController (Media3; emits Started/Ended), QariAudioResolver
 core/time/         Clock (wall + monotonic) for testability
 data/settings/     UserSettings + DataStore repository
 data/db/           Room: sessions, bookmarks (no audio, no transcripts)
 data/session/      Session/Bookmark repositories
-data/reference/    QuranReferenceRepository (read-only SQLite asset), WordDisplayRule
-session/           RecitationSessionManager (live state, persistence queue, Lukma, playback
-                   isolation, interruption handling) + SessionState
+data/reference/    QuranReferenceRepository (read-only SQLite asset), WordDisplayRule,
+                   EngineReference (word table → engine QuranReference, loaded once, cached)
+session/           RecitationSessionManager (adapter around the engine's
+                   RecitationSessionController) + LiveSession (UI state)
+src/debug/         SimulatedRecognitionEngine + DebugModule (debug builds only)
 service/           RecitationService (microphone FGS + notification)
 di/                Hilt modules (ApplicationScope = SupervisorJob + Main.immediate)
 ui/                onboarding, home, recitation, quran, history, settings, components, theme
 ```
 
-Data flow today: `AudioCapture → (gate: LISTENING && !suppressed) → QuranRecognitionEngine →
-RecitationSessionManager.onRecognitionEvent → StateFlow → ViewModels / notification`.
-Position is advanced manually (Quran screen word tap / "Recite from here", Recitation screen
-Next/Previous word) until the engine is wired.
+Data flow: `AudioCapture → (gate: listening && no hint) → EnergyVad + QuranRecognitionEngine →
+RecitationSessionManager → RecitationSessionController.handle() → SessionUiState → LiveSession
+StateFlow → ViewModels / notification`, with controller snapshots persisted to Room.
+
+## Engine integration (`session/RecitationSessionManager`)
+
+* **Reference.** `CachedEngineReference` streams `SELECT id, surah, ayah, word_index,
+  norm_skeleton, phonetic, stop_marks FROM word ORDER BY id` into `EngineReferenceBuilder`:
+  globalId = `word.id` (verified contiguous 0..77428), matchKey = `norm_skeleton`, phonetic =
+  space-split `phonetic`, waqfAfter = `stop_marks` contains U+06D6..U+06DC except U+06D9 ("do not
+  stop"). Strings are interned. Loaded once on `Dispatchers.Default`; JVM measurement
+  (`EngineReferenceTest`, sqlite-jdbc on the real DB): **~350 ms, ~6 MB retained** (plus the
+  controller's n-gram index). Home shows "Position tracking: Preparing… / Ready (loaded in N ms)".
+* **One dispatcher.** All inputs go through one channel consumed on `@EngineDispatcher`
+  (`Dispatchers.Default.limitedParallelism(1)`); the controller is only touched there.
+* **Inputs.** `Initialize` once the reference is loaded; on Start: `PermissionsResult(true)`
+  (the UI only starts after RECORD_AUDIO is granted), `ModelReady` (also when no model is
+  installed — the session then runs in manual mode), `ReferenceReady`, `StartSession(mode from
+  Settings)`; `RecoverSession` from the Room row (Home "Resume session"); `RecognizerStatusChanged
+  (Listening)` when `runRecognizer` is bound; `Recognition` events; `SpeechActivity` edges from
+  `EnergyVad` on the same gated frames; `Tick` every 250 ms while a session exists; Lukma
+  request / accept (hint or full ayah) / decline; Pause/Resume/Stop; `PlaybackStarted/Ended` from
+  `QuranAudioPlayback`; `Interrupted`/`InterruptionEnded` from focus/call/noisy/capture errors
+  (auto-resume only after call/focus); `SetManualPosition` for word taps (new engine input).
+* **Persistence.** A Room row is created at StartSession (start = requested ayah or 1:1, updated
+  to the first located ayah); the snapshot is written whenever the confirmed position or the
+  status changes and on stop (COMPLETED + endedAt; deleted if "keep history" is off). Room
+  schema unchanged (one new `updateStart` query). Recovery maps `lastSurah/lastAyah/lastWord` back
+  to a global word id (`lastWord = 0` → locate again).
+* **Hints.** When the controller exposes `activeHint`, the clip comes from `QariAudioResolver`
+  (word timings for NEXT_WORD/PHRASE, the whole ayah for FULL_AYAH). With no Qari audio a
+  gentle notice is shown and `PlaybackEnded` is sent at once, so recitation resumes.
+  `smartAssistance = off` declines automatic offers silently (the Lukma button still works).
+* **Recitation screen** renders the engine state label, pause class, current ayah with the
+  candidate word highlighted (tap a word = manual position), the next ayah dimmed, the offer card
+  (Play hint / Play full ayah / Continue), surfaced feedback phrased gently, and Previous/Next word
+  buttons when no model is ready.
+
+## Simulated recognizer (debug builds)
+
+Settings → Developer (debug only) → "Simulated recognizer": replays the reference's `norm_skeleton`
+keys for surah S, ayahs A..B at a chosen pace (provisional token mid-word, stable at the end),
+optionally with one ~10 s mid-ayah pause (→ Lukma offer) and injected errors (one wrong word
+followed by a restart two words back, one skipped word). It reads the DB, never literals.
+Simulated time advances only with received audio frames, so it stalls while paused or while a
+hint plays. Applies to the next session (it still needs the mic FGS; on an emulator the virtual
+mic supplies frames). `SimulatedPipelineTest` runs the whole pipeline on the real DB with a virtual
+clock: locate in 67:1, words advance, no offer at 3 s of silence, offer after ≥ 5 s, tokens during
+hint playback ignored, resume to the end of the range, snapshot persisted / COMPLETED on stop.
 
 ## Quran text
 
@@ -116,21 +165,19 @@ Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
   after playback ends; the audio gate closes meanwhile, and hints never move the position.
   ExoPlayer does not request audio focus itself (the session holds it).
 
-## Integration points (TODO)
+## Remaining integration TODOs
 
-1. **Engine (`:engine`)** — `RecitationSessionManager` is the adapter. Map engine
-   `recognition.RecognitionEvent` ↔ `core/recognition/RecognitionEvent` (or replace the local
-   type), feed stable tokens to the engine's `RecitationSessionController` /
-   `QuranPositionTracker` and call `onConfirmedPosition()`; drive Lukma offers from its
-   PauseDetector/FeedbackPolicy (respect `smartAssistance`). The engine's API was still
-   uncommitted when this was written, so nothing imports it yet.
-2. **Model** — implement `QuranRecognitionEngine` with ONNX Runtime and bind it in
-   `di/AppModule.kt` instead of `UnavailableRecognitionEngine`; report `ModelReadiness`.
-3. **Resources** — download manager for model + Qari audio; implement `QariAudioResolver`
-   (ayah clips + word timings) and the Home "Qari audio" readiness row.
-4. **Reference engine data** — build the engine's `QuranReference` from the `word` table
-   (`norm_skeleton`, `phonetic`), reusing `SqliteQuranReferenceRepository`'s DB handle.
-5. Memorization mode is a stored setting only.
+1. **Real recognizer** — implement `QuranRecognitionEngine` on ONNX Runtime (the `:asr` module's
+   quran-asr-small port) and use it inside `SelectableRecognitionEngine` instead of
+   `UnavailableRecognitionEngine`; report `ModelReadiness` (download progress feeds
+   `ModelDownloadProgress`). Token text must use the `norm_skeleton` normalization and
+   `elapsedRealtime` timestamps. If it is phoneme-based, the controller must be built with
+   `TokenUnit.PHONEME` (currently fixed per process from `QuranRecognitionEngine.unit`).
+2. **Qari audio downloads** — download manager for model + Qari audio; implement
+   `QariAudioResolver` (ayah clips + word timings) and the Home "Qari audio" readiness row.
+3. **Font** — licensed Indo-Pak Nastaleeq font (see "Quran text").
+4. Thresholds (pause, feedback, VAD) are tuned on synthetic data only; re-tune on real recordings.
+5. Emulator screenshots were not captured: this cloud machine has no `/dev/kvm`.
 
 ## Must be tested on a real device
 

@@ -1,11 +1,11 @@
 package com.qurancompanion.core.playback
 
-import android.net.Uri
 import javax.inject.Inject
 
 /** A playable clip of Qari audio for one ayah, with optional word-level timings (ms). */
 data class AyahAudio(
-    val uri: Uri,
+    /** Content or file URI string (parsed by the player). */
+    val uri: String,
     val startMs: Long = 0,
     val endMs: Long? = null,
     /** wordTimings[i] = (startMs, endMs) of word i+1; empty when no timing data is licensed/available. */

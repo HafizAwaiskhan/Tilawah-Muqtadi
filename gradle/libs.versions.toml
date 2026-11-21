@@ -17,7 +17,7 @@ hilt-navigation-compose = "1.2.0"
 room = "2.7.2"
 datastore = "1.1.7"
 media3 = "1.8.0"
-onnxruntime = "1.22.0"
+onnxruntime = "1.26.0"
 sqlite-jdbc = "3.41.2.2"
 
 [libraries]

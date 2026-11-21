@@ -36,7 +36,7 @@ object SimulatorScript {
     const val START_SILENCE_MS = 1_000L
     const val GAP_MS = 150L
     const val AYAH_END_MS = 900L
-    const val FORGET_MS = 9_000L
+    const val FORGET_MS = 10_000L
 
     fun wordRange(ref: QuranReference, cfg: DeveloperSettings): IntRange? {
         val first = ref.ayahWords(cfg.surah, cfg.fromAyah) ?: return null
@@ -50,7 +50,10 @@ object SimulatorScript {
         val range = wordRange(ref, cfg) ?: return emptyList()
         val n = range.last - range.first + 1
         val wordMs = cfg.wordMs.coerceIn(150, 3_000).toLong()
-        val forgetAt = if (cfg.forgetPause && n >= 6) range.first + n / 2 else null
+        // Mid-ayah (not after an ayah end / waqf, where pause thresholds are doubled).
+        val forgetAt = if (cfg.forgetPause && n >= 6) {
+            ((range.first + n / 2)..range.last).firstOrNull { !ref.isPausePoint(it - 1) && !ref.isPausePoint(it) }
+        } else null
         val wrongAt = if (cfg.injectErrors && n >= 10) range.first + maxOf(3, n / 4) else null
         val skipAt = if (cfg.injectErrors && n >= 12) range.first + (n * 3) / 4 else null
         val out = ArrayList<SimWord>()

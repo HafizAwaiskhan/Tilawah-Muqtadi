@@ -1,7 +1,6 @@
 package com.qurancompanion.core.playback
 
 import android.content.Context
-import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -30,7 +29,7 @@ interface QuranAudioPlayback {
     val isPlaying: StateFlow<Boolean>
     val events: SharedFlow<PlaybackEvent>
     /** Plays [uri] from [startMs] to [endMs] (null = to the end). Must be called on the main thread. */
-    fun play(uri: Uri, tag: String, startMs: Long = 0, endMs: Long? = null, speed: Float = 1f, volume: Float = 1f)
+    fun play(uri: String, tag: String, startMs: Long = 0, endMs: Long? = null, speed: Float = 1f, volume: Float = 1f)
     fun stop()
     fun release()
 }
@@ -89,7 +88,7 @@ class QuranAudioPlaybackController @Inject constructor(
             player = it
         }
 
-    override fun play(uri: Uri, tag: String, startMs: Long, endMs: Long?, speed: Float, volume: Float) {
+    override fun play(uri: String, tag: String, startMs: Long, endMs: Long?, speed: Float, volume: Float) {
         val p = obtainPlayer()
         if (currentTag != null) finish(null)
         currentTag = tag

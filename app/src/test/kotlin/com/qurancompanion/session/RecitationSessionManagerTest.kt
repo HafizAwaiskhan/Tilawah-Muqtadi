@@ -1,6 +1,5 @@
 package com.qurancompanion.session
 
-import android.net.Uri
 import com.qurancompanion.FakePlayback
 import com.qurancompanion.FakeQariAudio
 import com.qurancompanion.FakeRecognizer
@@ -57,7 +56,7 @@ class RecitationSessionManagerTest {
         for (w in words) {
             val start = testScheduler.currentTime
             advanceTimeBy(500)
-            m.onRecognitionEvent(RecognitionEvent(listOf(Token("s${surah}a${ayah}w$w", start, testScheduler.currentTime, 0.95f)), true, testScheduler.currentTime))
+            m.onRecognitionEvent(RecognitionEvent(listOf(Token(ref.word(ref.ayahWords(surah, ayah)!!.first + w - 1).matchKey, start, testScheduler.currentTime, 0.95f)), true, testScheduler.currentTime))
             advanceTimeBy(150)
         }
         runCurrent()
@@ -192,7 +191,7 @@ class RecitationSessionManagerTest {
     }
 
     @Test fun hintPlaysWordClipAndSuppressesRecognitionWithTail() = runTest {
-        qari.audio = AyahAudio(Uri.EMPTY, wordTimings = (0 until 6).map { it * 1000L to it * 1000L + 900 })
+        qari.audio = AyahAudio("file://hint.mp3", wordTimings = (0 until 6).map { it * 1000L to it * 1000L + 900 })
         val m = manager()
         m.start(); runCurrent()
         m.setManualPosition(QuranPosition(1, 2, 2)); runCurrent()

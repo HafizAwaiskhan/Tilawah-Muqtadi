@@ -1,6 +1,5 @@
 package com.qurancompanion
 
-import android.net.Uri
 import com.qurancompanion.core.playback.AyahAudio
 import com.qurancompanion.core.playback.PlaybackEvent
 import com.qurancompanion.core.playback.QariAudioResolver
@@ -82,7 +81,7 @@ class FakePlayback : QuranAudioPlayback {
     override val events: SharedFlow<PlaybackEvent> = emitted
     val played = mutableListOf<Triple<String, Long, Long?>>()
 
-    override fun play(uri: Uri, tag: String, startMs: Long, endMs: Long?, speed: Float, volume: Float) {
+    override fun play(uri: String, tag: String, startMs: Long, endMs: Long?, speed: Float, volume: Float) {
         played += Triple(tag, startMs, endMs)
         playing.value = true
         emitted.tryEmit(PlaybackEvent.Started(tag))
@@ -114,11 +113,12 @@ class FakeRecognizer(initial: ModelReadiness = ModelReadiness.Ready("fake", "1")
 /** Silent 20 ms frames on the (virtual) clock. */
 fun silentFrames(): Flow<ShortArray> = flow { while (true) { emit(ShortArray(320)); delay(20) } }
 
-/** Synthetic reference: [surahs] × [ayahs] × [words], token "s{S}a{A}w{W}" (unique, no Quran text). */
+/** Synthetic reference: [surahs] × [ayahs] × [words] of random 6-letter Latin tokens (no Quran text). */
 fun syntheticReference(surahs: Int = 3, ayahs: Int = 6, words: Int = 6): QuranReference {
+    val rnd = kotlin.random.Random(42)
     val list = ArrayList<WordRef>()
     for (s in 1..surahs) for (a in 1..ayahs) for (w in 1..words) {
-        list += WordRef(list.size, s, a, w, "s${s}a${a}w$w")
+        list += WordRef(list.size, s, a, w, (1..6).map { 'a' + rnd.nextInt(26) }.joinToString(""))
     }
     return InMemoryQuranReference(list)
 }

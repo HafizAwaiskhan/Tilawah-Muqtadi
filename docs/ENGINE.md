@@ -66,6 +66,9 @@ class RecitationSessionController(reference: QuranReference, unit: TokenUnit, cl
 `ReferenceReady`, `StartSession(mode)`, `RecoverSession(snapshot)`, `RecognizerStatusChanged(status)`,
 `Recognition(event)`, `SpeechActivity(speaking)` (optional VAD), `Tick` (every 250–500 ms),
 `RequestLukma(level?)`, `AcceptOffer(level?)`, `DeclineOffer`, `Pause`, `Resume`, `Stop`, `Reset`,
+`SetManualPosition(wordId)` (manual recovery: "I have just recited this word" — while listening →
+RECITING; while PAUSED/INTERRUPTED/RECOVERING only moves the position; ignored during playback;
+withdraws a pending offer and clears held mistakes),
 `PlaybackStarted`, `PlaybackEnded`, `Interrupted(reason)`, `InterruptionEnded`, `Failure(message)`.
 
 `SessionUiState`: `state`, `mode`, `sessionId`, `confirmed` (last committed `WordPosition`),
@@ -199,7 +202,7 @@ tokens are dropped; afterwards tokens overlapping [start, end + 300 ms] or the r
 
 ## Validation (synthetic)
 
-84 JVM tests: component tests for every class, the state table, and scenarios on a synthetic
+88 JVM tests (incl. `ManualPositionTest`): component tests for every class, the state table, and scenarios on a synthetic
 reference (3 surahs, 237 ayahs, Zipf word frequencies, a refrain repeated 4×, a phrase shared by two
 surahs, an ayah identical across surahs): breathing pause, waqf pause, forgotten word → offer → hint →
 resume, repeat current ayah, previous ayah, skip, surah jump, mid-ayah start, ambiguous refrain,
