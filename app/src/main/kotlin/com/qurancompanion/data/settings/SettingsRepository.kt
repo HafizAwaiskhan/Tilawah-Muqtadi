@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,6 +38,13 @@ class DataStoreSettingsRepository @Inject constructor(
         val volume = floatPreferencesKey("playback_volume")
         val qari = stringPreferencesKey("preferred_qari_id")
         val keepHistory = booleanPreferencesKey("keep_history")
+        val devSim = booleanPreferencesKey("dev_sim_recognizer")
+        val devSurah = intPreferencesKey("dev_sim_surah")
+        val devFrom = intPreferencesKey("dev_sim_from_ayah")
+        val devTo = intPreferencesKey("dev_sim_to_ayah")
+        val devWordMs = intPreferencesKey("dev_sim_word_ms")
+        val devForget = booleanPreferencesKey("dev_sim_forget_pause")
+        val devErrors = booleanPreferencesKey("dev_sim_errors")
     }
 
     override val settings: Flow<UserSettings> = store.data.map { it.toSettings() }
@@ -52,6 +60,14 @@ class DataStoreSettingsRepository @Inject constructor(
             prefs[Keys.volume] = updated.playbackVolume.coerceIn(UserSettings.VOLUME_RANGE)
             if (updated.preferredQariId.isNullOrBlank()) prefs.remove(Keys.qari) else prefs[Keys.qari] = updated.preferredQariId
             prefs[Keys.keepHistory] = updated.keepHistory
+            val dev = updated.developer
+            prefs[Keys.devSim] = dev.simulatedRecognizer
+            prefs[Keys.devSurah] = dev.surah
+            prefs[Keys.devFrom] = dev.fromAyah
+            prefs[Keys.devTo] = dev.toAyah
+            prefs[Keys.devWordMs] = dev.wordMs
+            prefs[Keys.devForget] = dev.forgetPause
+            prefs[Keys.devErrors] = dev.injectErrors
         }
     }
 
@@ -66,6 +82,17 @@ class DataStoreSettingsRepository @Inject constructor(
             playbackVolume = this[Keys.volume] ?: d.playbackVolume,
             preferredQariId = this[Keys.qari],
             keepHistory = this[Keys.keepHistory] ?: d.keepHistory,
+            developer = d.developer.let { dd ->
+                DeveloperSettings(
+                    simulatedRecognizer = this[Keys.devSim] ?: dd.simulatedRecognizer,
+                    surah = this[Keys.devSurah] ?: dd.surah,
+                    fromAyah = this[Keys.devFrom] ?: dd.fromAyah,
+                    toAyah = this[Keys.devTo] ?: dd.toAyah,
+                    wordMs = this[Keys.devWordMs] ?: dd.wordMs,
+                    forgetPause = this[Keys.devForget] ?: dd.forgetPause,
+                    injectErrors = this[Keys.devErrors] ?: dd.injectErrors,
+                )
+            },
         )
     }
 }

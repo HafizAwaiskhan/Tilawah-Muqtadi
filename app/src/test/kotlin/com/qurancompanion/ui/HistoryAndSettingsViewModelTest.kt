@@ -1,6 +1,9 @@
 package com.qurancompanion.ui
 
-import com.qurancompanion.FakeClock
+import com.qurancompanion.FakeRecognizer
+import com.qurancompanion.FixedEngineReference
+import com.qurancompanion.SchedulerClock
+import com.qurancompanion.syntheticReference
 import com.qurancompanion.FakePlayback
 import com.qurancompanion.FakeQariAudio
 import com.qurancompanion.FakeSessionRepository
@@ -52,13 +55,17 @@ class HistoryAndSettingsViewModelTest {
 
     @Test fun historyDeletesButKeepsLiveSession() = runTest(dispatcher) {
         val repo = FakeSessionRepository()
-        val manager = RecitationSessionManager(repo, FakeSettingsRepository(), FakePlayback(), FakeQariAudio(), FakeClock(), backgroundScope)
+        val manager = RecitationSessionManager(
+            repo, FakeSettingsRepository(), FakePlayback(), FakeQariAudio(), SchedulerClock(testScheduler),
+            FixedEngineReference(syntheticReference()), FakeRecognizer(), backgroundScope, dispatcher,
+        )
+        runCurrent()
         val vm = HistoryViewModel(repo, manager)
         backgroundScope.launch { vm.state.collect {} }
 
-        manager.start(QuranPosition.START); manager.stop(); runCurrent()
+        manager.start(QuranPosition.START); runCurrent(); manager.stop(); runCurrent()
         manager.reset()
-        manager.start(QuranPosition(2, 1)); manager.stop(); runCurrent()
+        manager.start(QuranPosition(2, 1)); runCurrent(); manager.stop(); runCurrent()
         manager.reset()
         manager.start(QuranPosition(3, 1)); runCurrent()
         assertEquals(3, vm.state.value.sessions.size)

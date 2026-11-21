@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qurancompanion.core.recognition.ModelReadiness
 import com.qurancompanion.data.reference.QuranPosition
 import com.qurancompanion.data.reference.ReferenceStatus
+import com.qurancompanion.session.TrackingReadiness
 import com.qurancompanion.ui.components.formatDuration
 import com.qurancompanion.ui.components.formatTimestamp
 import com.qurancompanion.ui.components.rememberRecitationStarter
@@ -53,13 +54,16 @@ fun HomeScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Session in progress", style = MaterialTheme.typography.titleMedium)
-                    Text("At ${state.live.position.label()} · ${state.live.status.name.lowercase()}")
+                    Text(
+                        (state.live.engine.confirmed?.let { "At ${state.live.position.label()}" } ?: "Finding your position") +
+                            " · ${state.live.status.name.lowercase()}"
+                    )
                     Button(onClick = onOpenRecitation, Modifier.padding(top = 8.dp)) { Text("Open session") }
                 }
             }
         } else {
             Button(
-                onClick = { starter.start { vm.startNew(state.suggestedStart); onOpenRecitation() } },
+                onClick = { starter.start { vm.startNew(); onOpenRecitation() } },
                 modifier = Modifier.fillMaxWidth().height(64.dp),
             ) {
                 Icon(Icons.Filled.Mic, contentDescription = null)
@@ -103,9 +107,18 @@ fun HomeScreen(
                     state.reference is ReferenceStatus.Ready,
                 )
                 ReadinessRow(
+                    "Position tracking",
+                    when (state.live.readiness) {
+                        TrackingReadiness.FETCHING_REFERENCE -> "Preparing (loading the reference)…"
+                        TrackingReadiness.READY -> "Ready" + (state.live.referenceLoadMs?.let { " (loaded in ${it} ms)" } ?: "")
+                        TrackingReadiness.UNAVAILABLE -> "Unavailable — Quran text is not installed"
+                    },
+                    state.live.readiness == TrackingReadiness.READY,
+                )
+                ReadinessRow(
                     "Recognition model",
                     when (val m = state.model) {
-                        ModelReadiness.NotInstalled -> "Not installed — follow along manually for now"
+                        ModelReadiness.NotInstalled -> "Not installed — tap the word you are on to follow along"
                         is ModelReadiness.Downloading -> "Downloading ${(m.progress * 100).toInt()}%"
                         ModelReadiness.Loading -> "Loading…"
                         is ModelReadiness.Ready -> "Ready (${m.modelId} ${m.version})"

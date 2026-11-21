@@ -40,8 +40,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.qurancompanion.session.AssistanceState
-import com.qurancompanion.session.HintKind
 import com.qurancompanion.session.ListeningStatus
 import com.qurancompanion.ui.components.AyahWords
 import com.qurancompanion.ui.components.formatDuration
@@ -55,9 +53,8 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
     val session = state.session
     val status = session.status
     val context = LocalContext.current
-    val offered = session.assistance is AssistanceState.Offered
-    LaunchedEffect(offered) {
-        if (offered && state.vibration) {
+    LaunchedEffect(state.showOffer) {
+        if (state.showOffer && state.vibration) {
             context.getSystemService(Vibrator::class.java)
                 ?.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
         }
@@ -80,21 +77,29 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
             // Position + status header
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    val pos = if (status == ListeningStatus.IDLE) state.requestedStart ?: session.position else session.position
+                    val ayah = state.ayah
                     Text(
-                        (state.surah?.let { "${it.nameTransliterated} · " } ?: "") + "${pos.surah}:${pos.ayah}",
+                        (state.surah?.let { "${it.nameTransliterated} · " } ?: "") +
+                            (ayah?.let { "${it.surah}:${it.ayah}" } ?: session.position.label()),
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
-                        state.listeningLabel,
+                        state.stateLabel + (state.pauseLabel?.let { " · $it" } ?: ""),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
+                    session.engine.confirmed?.let {
+                        Text(
+                            "Confirmed: ${it.surah}:${it.ayah} · word ${it.wordIndex}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
                 }
-                Text(formatDuration(state.durationMs), style = MaterialTheme.typography.headlineSmall)
+                Text(formatDuration(session.durationMs), style = MaterialTheme.typography.headlineSmall)
             }
 
-            // Current ayah, word by word
+            // Current ayah, word by word (tap a word to correct the position)
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     val ayah = state.ayah
@@ -103,13 +108,14 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                     } else {
                         AyahWords(
                             words = ayah.words,
-                            highlightWord = if (status.isRunning) session.position.word.coerceAtLeast(1) else null,
+                            highlightWord = state.highlightWord,
                             ayahNumber = ayah.ayah,
+                            onWordClick = if (status.isRunning) { w -> vm.tapWord(ayah.surah, ayah.ayah, w.index) } else null,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    if (status.isRunning && !state.model.isReady) {
-                        // Manual tracking until the recognition engine confirms positions.
+                    if (state.manualTracking) {
+                        // No recognition model: the user moves the position (tap a word, or step).
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = vm::previousWord) {
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null); Text("Previous word")
@@ -121,17 +127,28 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                     }
                 }
             }
+            state.nextAyah?.takeIf { status.isRunning }?.let { next ->
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(12.dp)) {
+                        AyahWords(
+                            words = next.words,
+                            ayahNumber = next.ayah,
+                            onWordClick = { w -> vm.tapWord(next.surah, next.ayah, w.index) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
 
-            AssistanceCard(state.session.assistance, vm)
+            AssistanceCard(state, vm)
 
             // Controls
             when (status) {
                 ListeningStatus.IDLE, ListeningStatus.STOPPED -> {
                     if (status == ListeningStatus.STOPPED) {
-                        Text(
-                            "Session saved: ${session.startPosition.label()} → ${session.position.label()}, " +
-                                formatDuration(session.accumulatedMs),
-                        )
+                        val start = session.startPosition?.let { "${it.surah}:${it.ayah}" } ?: "—"
+                        val end = session.engine.confirmed?.let { "${it.surah}:${it.ayah} · word ${it.wordIndex}" } ?: "—"
+                        Text("Session saved: $start → $end, " + formatDuration(session.durationMs))
                     }
                     Button(
                         onClick = { starter.start { vm.start() } },
@@ -156,7 +173,7 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
                     }
                     FilledTonalButton(
                         onClick = vm::lukma,
-                        enabled = session.assistance is AssistanceState.None,
+                        enabled = state.canRequestLukma,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                     ) { Text("Lukma — help me continue") }
                 }
@@ -166,32 +183,37 @@ fun RecitationScreen(onBack: () -> Unit, vm: RecitationViewModel = hiltViewModel
 }
 
 @Composable
-private fun AssistanceCard(assistance: AssistanceState, vm: RecitationViewModel) {
-    if (assistance is AssistanceState.None) return
+private fun AssistanceCard(state: RecitationUiState, vm: RecitationViewModel) {
+    val session = state.session
+    val notice = session.notice
+    val feedback = state.feedback?.takeIf { session.status.isRunning }
+    if (!state.showOffer && !session.isPlayingHint && notice == null && feedback == null) return
     Card(
         Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            when (assistance) {
-                is AssistanceState.Offered -> {
+            when {
+                state.showOffer -> {
                     Text("Would you like a hint?", style = MaterialTheme.typography.titleMedium)
-                    Text("Your position stays at ${assistance.position.label()}. Recognition pauses while the hint plays.")
+                    Text("Your position stays where it is. Recognition pauses while the hint plays.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.playHint(HintKind.NEXT_WORD) }) { Text("Play hint") }
-                        OutlinedButton(onClick = { vm.playHint(HintKind.FULL_AYAH) }) { Text("Full ayah") }
+                        Button(onClick = vm::playHint) { Text("Play hint") }
+                        OutlinedButton(onClick = vm::playFullAyah) { Text("Play full ayah") }
                     }
-                    TextButton(onClick = vm::continueReciting) { Text("Continue reciting") }
+                    TextButton(onClick = vm::continueReciting) { Text("Continue") }
                 }
-                is AssistanceState.Playing -> {
-                    Text("Playing ${if (assistance.kind == HintKind.NEXT_WORD) "hint" else "ayah"}…")
-                    TextButton(onClick = vm::continueReciting) { Text("Stop and continue") }
+                session.isPlayingHint -> {
+                    Text(if (session.state == com.qurancompanion.engine.session.SessionState.PLAYING_FULL_AYAH) "Playing the ayah…" else "Playing hint…")
+                    TextButton(onClick = vm::stopHint) { Text("Stop and continue") }
                 }
-                is AssistanceState.Unavailable -> {
-                    Text(assistance.message)
-                    TextButton(onClick = vm::continueReciting) { Text("Continue reciting") }
+                notice != null -> {
+                    Text(notice)
+                    TextButton(onClick = vm::dismissNotice) { Text("OK") }
                 }
-                AssistanceState.None -> Unit
+                feedback != null -> {
+                    Text(feedback.text, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }

@@ -32,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qurancompanion.data.settings.RecitationMode
@@ -96,6 +98,25 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
         )
         dataVersion?.let { Text("Reference data: $it", style = MaterialTheme.typography.bodySmall) }
         TextButton(onClick = vm::replayOnboarding) { Text("Show introduction again") }
+
+        if (vm.developerAvailable) {
+            Section("Developer (debug build)")
+            val d = s.developer
+            SwitchRow("Simulated recognizer",
+                "Replays the reference words of the range below instead of listening — exercises tracking, highlighting, pauses and Lukma without a model. Applies to the next session.",
+                d.simulatedRecognizer) { v -> vm.updateDeveloper { it.copy(simulatedRecognizer = v) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NumberField("Surah", d.surah, Modifier.weight(1f)) { v -> vm.updateDeveloper { it.copy(surah = v) } }
+                NumberField("From ayah", d.fromAyah, Modifier.weight(1f)) { v -> vm.updateDeveloper { it.copy(fromAyah = v) } }
+                NumberField("To ayah", d.toAyah, Modifier.weight(1f)) { v -> vm.updateDeveloper { it.copy(toAyah = v) } }
+            }
+            SliderRow("Pace (ms per word)", d.wordMs.toFloat(), 200f..2000f, steps = 17,
+                label = { "${it.toInt()} ms" }) { v -> vm.updateDeveloper { it.copy(wordMs = v.toInt()) } }
+            SwitchRow("Long pause mid-range", "One ~9 s pause before a word (triggers a Lukma offer).",
+                d.forgetPause) { v -> vm.updateDeveloper { it.copy(forgetPause = v) } }
+            SwitchRow("Inject errors", "One wrong word followed by a self-correction, and one skipped word.",
+                d.injectErrors) { v -> vm.updateDeveloper { it.copy(injectErrors = v) } }
+        }
     }
 
     if (confirmClear) {
@@ -107,6 +128,19 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
             dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun NumberField(label: String, value: Int, modifier: Modifier, onChange: (Int) -> Unit) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { t -> text = t.filter(Char::isDigit).take(3); text.toIntOrNull()?.let(onChange) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier,
+    )
 }
 
 @Composable

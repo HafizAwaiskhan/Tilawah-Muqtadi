@@ -163,6 +163,22 @@ class SqliteQuranReferenceRepository @Inject constructor(
             }
         }
 
+    override suspend fun forEachEngineWord(consumer: (EngineWordRow) -> Unit): Boolean = withContext(Dispatchers.IO) {
+        val database = requireDb() ?: return@withContext false
+        database.rawQuery(EngineReferenceBuilder.WORD_QUERY, null).use { c ->
+            while (c.moveToNext()) {
+                consumer(
+                    EngineWordRow(
+                        id = c.getInt(0), surah = c.getInt(1), ayah = c.getInt(2), wordIndex = c.getInt(3),
+                        normSkeleton = c.getString(4).orEmpty(), phonetic = c.getString(5).orEmpty(),
+                        stopMarks = c.getString(6).orEmpty(),
+                    )
+                )
+            }
+        }
+        true
+    }
+
     override suspend fun meta(key: String): String? = withContext(Dispatchers.IO) {
         requireDb()?.let { readMeta(it, key) }
     }

@@ -11,13 +11,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
+import com.qurancompanion.engine.recognition.RecognitionEvent
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Used until a recognition model is chosen and installed (Phase 2). It drains the audio flow
  * (so capture, focus and FGS behaviour can be exercised end-to-end on a device) but discards
- * every frame and emits no events. Position is then advanced manually from the UI.
+ * every frame and emits no events. Position is then set manually from the UI (word tap).
  */
 @Singleton
 class UnavailableRecognitionEngine @Inject constructor() : QuranRecognitionEngine {

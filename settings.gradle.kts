@@ -8,3 +8,4 @@ dependencyResolutionManagement {
 rootProject.name = "QuranCompanion"
 include(":engine")
 include(":app")
+include(":asr")

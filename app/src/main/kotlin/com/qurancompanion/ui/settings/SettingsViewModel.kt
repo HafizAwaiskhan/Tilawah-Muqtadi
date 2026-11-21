@@ -2,7 +2,9 @@ package com.qurancompanion.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.qurancompanion.BuildConfig
 import com.qurancompanion.data.reference.QuranReferenceRepository
+import com.qurancompanion.data.settings.DeveloperSettings
 import com.qurancompanion.data.session.SessionRepository
 import com.qurancompanion.data.settings.RecitationMode
 import com.qurancompanion.data.settings.SettingsRepository
@@ -51,6 +53,21 @@ class SettingsViewModel @Inject constructor(
 
     fun clearHistory() {
         viewModelScope.launch { sessions.deleteAll() }
+    }
+
+    /** Developer section (simulated recognizer) is only offered in debug builds. */
+    val developerAvailable: Boolean = BuildConfig.DEBUG
+
+    fun updateDeveloper(t: (DeveloperSettings) -> DeveloperSettings) = update {
+        val d = t(it.developer)
+        it.copy(
+            developer = d.copy(
+                surah = d.surah.coerceIn(1, 114),
+                fromAyah = d.fromAyah.coerceAtLeast(1),
+                toAyah = d.toAyah.coerceAtLeast(d.fromAyah.coerceAtLeast(1)),
+                wordMs = d.wordMs.coerceIn(200, 2_000),
+            )
+        )
     }
 
     fun replayOnboarding() = update { it.copy(onboardingCompleted = false) }

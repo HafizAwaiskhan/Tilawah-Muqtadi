@@ -16,6 +16,8 @@ interface SessionRepository {
     suspend fun get(id: Long): SessionEntity?
     suspend fun create(session: SessionEntity): Long
     suspend fun updatePosition(id: Long, surah: Int, ayah: Int, word: Int, durationMs: Long)
+    /** Sets the start ayah once the engine has located where the user actually began. */
+    suspend fun updateStart(id: Long, surah: Int, ayah: Int)
     suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?)
     suspend fun delete(id: Long)
     suspend fun deleteAll()
@@ -36,6 +38,7 @@ class RoomSessionRepository @Inject constructor(private val dao: SessionDao) : S
     override suspend fun create(session: SessionEntity) = dao.insert(session)
     override suspend fun updatePosition(id: Long, surah: Int, ayah: Int, word: Int, durationMs: Long) =
         dao.updatePosition(id, surah, ayah, word, durationMs)
+    override suspend fun updateStart(id: Long, surah: Int, ayah: Int) = dao.updateStart(id, surah, ayah)
     override suspend fun updateStatus(id: Long, status: SessionStatus, durationMs: Long, endedAt: Long?) =
         dao.updateStatus(id, status, durationMs, endedAt)
     override suspend fun delete(id: Long) = dao.delete(id)

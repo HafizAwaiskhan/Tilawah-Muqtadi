@@ -24,14 +24,10 @@ import com.qurancompanion.core.recognition.QuranRecognitionEngine
 import com.qurancompanion.session.InterruptionReason
 import com.qurancompanion.session.ListeningStatus
 import com.qurancompanion.session.RecitationSessionManager
-import com.qurancompanion.session.SessionState
+import com.qurancompanion.session.LiveSession
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,8 +38,9 @@ import javax.inject.Inject
  * - Started only from the visible app ([start]); Android 14+ forbids starting a
  *   microphone-type FGS from the background. Not sticky: after process death the user resumes
  *   from Home (the last confirmed position is in Room).
- * - Opens the mic only while the session is LISTENING and no Qari audio is playing
- *   ([SessionState.audioGateOpen]); the AudioRecord is released when paused.
+ * - Runs the recognizer through [RecitationSessionManager.runRecognizer], which opens the mic
+ *   only while the session is listening and no Qari audio is playing ([LiveSession.audioGateOpen]);
+ *   the AudioRecord is released when paused.
  * - Ongoing notification with Pause/Resume/Stop.
  */
 @AndroidEntryPoint
@@ -90,25 +87,30 @@ class RecitationService : LifecycleService() {
         }
         started = true
 
-        lifecycleScope.launch { engine.initialize() }
-        engine.startListening(gatedAudio())
-
-        lifecycleScope.launch { engine.observeRecognition().collect(manager::onRecognitionEvent) }
+        lifecycleScope.launch {
+            manager.runRecognizer(engine, frames = { capture.frames() }) { e ->
+                Log.w(TAG, "Audio capture failed", e)
+                manager.interrupt(
+                    if (e is AudioCaptureException.PermissionDenied) InterruptionReason.PERMISSION_DENIED
+                    else InterruptionReason.CAPTURE_ERROR
+                )
+            }
+        }
         lifecycleScope.launch { interruptions.signals().collect(manager::onInterruptionSignal) }
         lifecycleScope.launch {
             capture.silenced.filter { it }.collect { manager.interrupt(InterruptionReason.CALL) }
         }
         lifecycleScope.launch {
             manager.state
-                .map { NotificationModel(it.status, it.position.label()) }
+                .map { NotificationModel(it.status, positionText(it)) }
                 .distinctUntilChanged()
                 .collect { model ->
                     // A resumed session is restored asynchronously, so IDLE only ends the
                     // service once a session has actually been running.
                     if (model.status.isRunning) seenRunning = true
-                    if (model.status == ListeningStatus.STOPPED ||
-                        (model.status == ListeningStatus.IDLE && seenRunning)
-                    ) {
+                    // The session is started asynchronously (engine loop), so a previous STOPPED/IDLE
+                    // state only ends the service once this session has actually been running.
+                    if (seenRunning && (model.status == ListeningStatus.STOPPED || model.status == ListeningStatus.IDLE)) {
                         stopSelf()
                     } else {
                         getSystemService(NotificationManager::class.java)
@@ -118,22 +120,7 @@ class RecitationService : LifecycleService() {
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private fun gatedAudio() = manager.state
-        .map { it.audioGateOpen }
-        .distinctUntilChanged()
-        .flatMapLatest { open ->
-            if (!open) emptyFlow() else capture.frames().catch { e ->
-                Log.w(TAG, "Audio capture failed", e)
-                manager.interrupt(
-                    if (e is AudioCaptureException.PermissionDenied) InterruptionReason.PERMISSION_DENIED
-                    else InterruptionReason.CAPTURE_ERROR
-                )
-            }
-        }
-
     override fun onDestroy() {
-        engine.stopListening()
         // If the system kills the service while running, keep the position (already persisted)
         // and mark it interrupted so Home can offer resume.
         manager.interrupt(InterruptionReason.CAPTURE_ERROR)
@@ -141,9 +128,12 @@ class RecitationService : LifecycleService() {
         super.onDestroy()
     }
 
+    private fun positionText(state: LiveSession): String =
+        state.engine.confirmed?.let { "Position ${state.position.label()}" } ?: "Finding your position…"
+
     private data class NotificationModel(val status: ListeningStatus, val position: String)
 
-    private fun buildNotification(state: SessionState): Notification {
+    private fun buildNotification(state: LiveSession): Notification {
         val title = when (state.status) {
             ListeningStatus.PAUSED -> getString(R.string.notification_title_paused)
             ListeningStatus.INTERRUPTED -> getString(R.string.notification_title_interrupted)
@@ -158,7 +148,7 @@ class RecitationService : LifecycleService() {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
-            .setContentText("Position ${state.position.label()}")
+            .setContentText(positionText(state))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)

@@ -11,7 +11,7 @@ import com.qurancompanion.data.reference.QuranReferenceRepository
 import com.qurancompanion.data.reference.ReferenceStatus
 import com.qurancompanion.data.session.SessionRepository
 import com.qurancompanion.session.RecitationSessionManager
-import com.qurancompanion.session.SessionState
+import com.qurancompanion.session.LiveSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HomeUiState(
-    val live: SessionState = SessionState(),
+    val live: LiveSession = LiveSession(),
     /** Persisted session that was not stopped (process death, interruption): offer resume. */
     val resumable: SessionEntity? = null,
     val lastCompleted: SessionEntity? = null,
@@ -29,9 +29,6 @@ data class HomeUiState(
     val model: ModelReadiness = ModelReadiness.NotInstalled,
     val qariInstalled: Boolean = false,
 ) {
-    /** Where "Start recitation" begins until the engine can detect the position itself. */
-    val suggestedStart: QuranPosition
-        get() = lastCompleted?.let { QuranPosition(it.lastSurah, it.lastAyah) } ?: QuranPosition.START
 }
 
 @HiltViewModel
@@ -64,9 +61,10 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { reference.ensureReady() }
     }
 
-    fun startNew(at: QuranPosition) {
+    /** The engine finds the position from the recitation itself. */
+    fun startNew() {
         manager.reset()
-        manager.start(at)
+        manager.start(null)
     }
 
     fun resume(sessionId: Long) {

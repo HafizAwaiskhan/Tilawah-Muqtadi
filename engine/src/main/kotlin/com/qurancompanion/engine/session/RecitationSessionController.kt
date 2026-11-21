@@ -46,6 +46,12 @@ sealed interface SessionInput {
     data object Resume : SessionInput
     data object Stop : SessionInput
     data object Reset : SessionInput
+    /**
+     * Manual recovery: the user says [wordId] is the word they have just recited (e.g. tapped it).
+     * Accepted while listening (-> RECITING) and while PAUSED/INTERRUPTED/RECOVERING_SESSION (position
+     * only). Ignored during hint playback. Clears held mistakes and withdraws a pending offer.
+     */
+    data class SetManualPosition(val wordId: Int) : SessionInput
     // Playback / system
     data object PlaybackStarted : SessionInput
     data object PlaybackEnded : SessionInput
@@ -202,6 +208,7 @@ class RecitationSessionController(
             SessionInput.InterruptionEnded -> if (state == INTERRUPTED) resume(now)
             SessionInput.Stop -> if (state in IN_SESSION) { stopPlayback(now); go(STOPPED) }
             SessionInput.Reset -> if (state == STOPPED || state == ERROR) { go(IDLE); sessionId = null }
+            is SessionInput.SetManualPosition -> setManualPosition(input.wordId, now)
             is SessionInput.Failure -> fail(input.message)
         }
         publish()
@@ -323,6 +330,19 @@ class RecitationSessionController(
         pauseClass = PauseClass.NONE
         go(RESUMING)
         go(baseState())
+    }
+
+    private fun setManualPosition(wordId: Int, now: Long) {
+        if (wordId !in 0 until reference.wordCount) return
+        val listening = state in LISTENING
+        if (!listening && state !in setOf(PAUSED, INTERRUPTED, RECOVERING_SESSION)) return
+        lukma.withdraw(now)
+        lukma.onResumed()
+        selfCorrection.clear()
+        tracker.restore(wordId)
+        pause.restart(now)
+        pauseClass = PauseClass.NONE
+        if (listening) { go(PROCESSING); go(baseState()) }
     }
 
     private fun fail(message: String) { error = message; if (state != ERROR) go(ERROR) }
