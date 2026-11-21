@@ -39,7 +39,12 @@ sealed interface SessionInput {
     /** Periodic clock tick (e.g. every 250-500 ms) for pause detection and self-correction windows. */
     data object Tick : SessionInput
     // User actions
-    data class RequestLukma(val level: HintLevel? = null) : SessionInput
+    /**
+     * User-initiated help. Without [wordId]: hint for the next word (repeats escalate). With [wordId]
+     * (e.g. a tapped flagged word): plays that word's ayah ([level] null = full ayah) and resumes
+     * tracking at the start of that ayah afterwards, like an accepted MISTAKE offer.
+     */
+    data class RequestLukma(val level: HintLevel? = null, val wordId: Int? = null) : SessionInput
     data class AcceptOffer(val level: HintLevel? = null) : SessionInput
     data object DeclineOffer : SessionInput
     data object Pause : SessionInput
@@ -91,8 +96,10 @@ data class SessionUiState(
     val activeHint: HintRequest? = null,
     /** Mistakes still inside the self-correction window (not shown as errors). */
     val heldMistakes: List<CandidateMistake> = emptyList(),
-    /** Mistakes surfaced by the feedback policy in this session (most recent last). */
+    /** Mistakes surfaced by the feedback policy in this session (most recent last, capped). */
     val feedback: List<CandidateMistake> = emptyList(),
+    /** Total mistakes surfaced in this session (not capped): new ones = increase since the last state. */
+    val feedbackCount: Int = 0,
     val repetitions: Int = 0,
     val downloadProgress: Float? = null,
     val error: String? = null,
@@ -138,6 +145,9 @@ class RecitationSessionController(
     private var lastAccountMs: Long? = null
     private var pauseClass = PauseClass.NONE
     private val feedback = ArrayList<CandidateMistake>()
+    private var feedbackCount = 0
+    /** First word of the ayah to re-recite after a MISTAKE hint (set while such a hint plays). */
+    private var restartAyahAt: Int? = null
     private var repetitions = 0
     private var downloadProgress: Float? = null
     private var error: String? = null
@@ -189,7 +199,9 @@ class RecitationSessionController(
             }
             SessionInput.Tick -> onTick(now)
             is SessionInput.RequestLukma -> if (state in LISTENING && state != LOCATING_POSITION) {
-                nextWord()?.let { lukma.request(it, input.level) }?.let { startHint(it, now) }
+                val hint = if (input.wordId != null) lukma.requestForMistake(input.wordId, input.level)
+                else nextWord()?.let { lukma.request(it, input.level) }
+                hint?.let { startHint(it, now) }
             }
             is SessionInput.AcceptOffer -> if (state == WAITING_FOR_CONFIRMATION) {
                 lukma.accept(input.level)?.let { startHint(it, now) }
@@ -200,6 +212,7 @@ class RecitationSessionController(
             SessionInput.PlaybackStarted -> if (state in PLAYING) guard.onPlaybackStart(now)
             SessionInput.PlaybackEnded -> if (state in PLAYING) {
                 guard.onPlaybackEnd(now); lukma.onPlaybackFinished(now); pause.restart(now); pauseClass = PauseClass.NONE
+                restartAtAyahStart()
                 go(WAITING_FOR_RETRY)
             }
             SessionInput.Pause -> if (state in LISTENING || state in PLAYING) { stopPlayback(now); go(PAUSED) }
@@ -229,7 +242,7 @@ class RecitationSessionController(
 
     private fun newSession(m: PracticeMode, now: Long, id: String, start: Long, duration: Long) {
         mode = m; sessionId = id; startTimeMs = start; durationMs = duration; lastAccountMs = now
-        feedback.clear(); repetitions = 0; pauseClass = PauseClass.NONE
+        feedback.clear(); feedbackCount = 0; restartAyahAt = null; repetitions = 0; pauseClass = PauseClass.NONE
         selfCorrection.clear(); policy.reset(); lukma.reset(); guard.reset(); pause.reset()
     }
 
@@ -269,7 +282,17 @@ class RecitationSessionController(
                 pause.onWord(u.tokens.lastOrNull()?.endMs ?: now, words)
             }
         }
-        if (!tracker.isTracking) { go(LOCATING_POSITION); return }
+        if (!tracker.isTracking) {
+            if (before == WAITING_FOR_CONFIRMATION) lukma.withdraw(now)
+            go(LOCATING_POSITION); return
+        }
+        val mistakeOffer = lukma.offer?.takeIf { it.reason == OfferReason.MISTAKE }
+        if (before == WAITING_FOR_CONFIRMATION && mistakeOffer != null) {
+            // A mistake offer stays while the user keeps reciting nearby; it goes once they have
+            // moved on (beyond the following ayah) or after the timeout (onTick).
+            if (movedOnFrom(mistakeOffer)) lukma.withdraw(now)
+            else { promote(now, offer = false); go(WAITING_FOR_CONFIRMATION); return }
+        }
         if (advanced) {
             if (before == WAITING_FOR_CONFIRMATION) lukma.withdraw(now)
             if (before == WAITING_FOR_RETRY) { lukma.onResumed(); go(RESUMING) }
@@ -280,6 +303,13 @@ class RecitationSessionController(
     }
 
     private fun onTick(now: Long) {
+        if (state == WAITING_FOR_CONFIRMATION) {
+            val o = lukma.offer
+            if (o != null && o.reason == OfferReason.MISTAKE && now - o.offeredAtMs >= config.lukma.mistakeOfferTimeoutMs) {
+                lukma.withdraw(now); pause.restart(now); go(baseState())
+            }
+            return
+        }
         if (state !in setOf(RECITING, SELF_CORRECTION_WINDOW, POSSIBLE_MISTAKE, PAUSE_DETECTED)) return
         if (promote(now)) return
         if (!tracker.isTracking) return
@@ -292,17 +322,42 @@ class RecitationSessionController(
         }
     }
 
-    /** Promotes due mistakes through the policy. Returns true if feedback was emitted (state POSSIBLE_MISTAKE). */
-    private fun promote(now: Long): Boolean {
-        var emitted = false
+    /**
+     * Promotes due mistakes through the policy. Returns true if feedback was emitted (state
+     * POSSIBLE_MISTAKE, then — if [offer] and the Lukma cooldown allows — a MISTAKE offer for the
+     * last surfaced mistake: WAITING_FOR_CONFIRMATION). Nothing plays without the user's confirmation.
+     */
+    private fun promote(now: Long, offer: Boolean = true): Boolean {
+        var last: CandidateMistake? = null
         for (m in selfCorrection.promoteDue(now)) {
             if (policy.shouldEmit(m, mode, now, tracker.confidence)) {
-                feedback += m; emitted = true
+                feedback += m; feedbackCount++; last = m
                 while (feedback.size > config.maxFeedbackKept) feedback.removeAt(0)
             }
         }
-        if (emitted) go(POSSIBLE_MISTAKE)
-        return emitted
+        if (last == null || !offer) return last != null
+        go(POSSIBLE_MISTAKE)
+        val wordId = last.wordId.coerceIn(0, reference.wordCount - 1)
+        if (lukma.offerForMistake(wordId, now) != null) { go(ASSISTANCE_OFFERED); go(WAITING_FOR_CONFIRMATION) }
+        return true
+    }
+
+    /** The user has recited past the ayah after the mistake's ayah. */
+    private fun movedOnFrom(o: LukmaOffer): Boolean {
+        val w = reference.word(o.mistakeWordId ?: o.nextWordId)
+        val ayah = reference.ayahWords(w.surah, w.ayah) ?: return false
+        val next = if (ayah.last + 1 < reference.wordCount) reference.word(ayah.last + 1) else null
+        val limit = next?.let { reference.ayahWords(it.surah, it.ayah)?.last } ?: ayah.last
+        val pos = tracker.lastConfirmed?.wordId ?: return false
+        return pos > limit || pos < ayah.first - 1
+    }
+
+    /** After a MISTAKE hint (played or cut short): the user re-recites that ayah from its first word. */
+    private fun restartAtAyahStart() {
+        val first = restartAyahAt ?: return
+        restartAyahAt = null
+        selfCorrection.clear()
+        if (first > 0) tracker.restore(first - 1) else tracker.reset()
     }
 
     private fun baseState(): SessionState = when {
@@ -318,11 +373,12 @@ class RecitationSessionController(
 
     private fun startHint(h: HintRequest, now: Long) {
         guard.onPlaybackStart(now) // guard from the moment of the request, not only from PlaybackStarted
+        restartAyahAt = if (h.reason == OfferReason.MISTAKE) reference.ayahWords(h.surah, h.ayah)?.first else null
         go(if (h.level == HintLevel.FULL_AYAH) PLAYING_FULL_AYAH else PLAYING_LUKMA)
     }
 
     private fun stopPlayback(now: Long) {
-        if (guard.isPlaying) { guard.onPlaybackEnd(now); lukma.onPlaybackFinished(now) }
+        if (guard.isPlaying) { guard.onPlaybackEnd(now); lukma.onPlaybackFinished(now); restartAtAyahStart() }
     }
 
     private fun resume(now: Long) {
@@ -367,7 +423,8 @@ class RecitationSessionController(
             confirmed = tracker.lastConfirmed, candidate = tracker.candidate, nextWordId = nextWord(),
             trackingConfidence = tracker.confidence, pauseClass = pauseClass,
             pendingOffer = lukma.offer, activeHint = lukma.activeHint,
-            heldMistakes = selfCorrection.held, feedback = feedback.toList(), repetitions = repetitions,
+            heldMistakes = selfCorrection.held, feedback = feedback.toList(), feedbackCount = feedbackCount,
+            repetitions = repetitions,
             downloadProgress = downloadProgress, error = error,
         )
     }
