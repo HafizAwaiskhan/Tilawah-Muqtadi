@@ -17,11 +17,12 @@ class AbdouRecognizerTest {
     private val vocab = Vocabulary.parse(sequenceOf("<blk> 0", "a 1", "b 2", "c 3", "d 4", "▁ 5"))
     private val levels = FloatArray(vocab.size) { if (it == 0) 0f else 0.01f * Math.pow(1.8, it.toDouble()).toFloat() }
     private val fbank = FbankExtractor()
+    private val latin = SkeletonNormalizer(setOf('a', 'b', 'c', 'd'))
 
     private fun block(id: Int): FloatArray = FloatArray(640) { (levels[id] * sin(2 * PI * 1000 * it / 16000)).toFloat() }
     private val refEnergy = DoubleArray(vocab.size) { id -> if (id == 0) -99.0 else meanLog(fbank.compute(block(id) + block(id) + block(id)), 6) }
 
-    private fun meanLog(f: Features, frame: Int) = (0 until f.numBins).sumOf { f[frame, it].toDouble() } / f.numBins
+    private fun meanLog(f: Features, frame: Int) = (0 until f.numBins).maxOf { f[frame, it].toDouble() }
 
     /** Fake model; [edgeNoiseFrames] output frames at the right edge are corrupted (letters -> 'd'). */
     inner class FakeModel(private val edgeNoiseFrames: Int = 0) : CtcAcousticModel {
@@ -73,7 +74,7 @@ class AbdouRecognizerTest {
 
     @Test fun stableWordsOnceInOrderWithTimes() {
         val (pcm, times) = audio(script)
-        val rec = AbdouRecognizer(FakeModel(), vocab)
+        val rec = AbdouRecognizer(FakeModel(), vocab, normalizer = latin)
         val ev = run(rec, pcm)
         val stable = ev.filter { it.second.isStable }.flatMap { it.second.tokens }
         assertEquals(script, stable.map { it.text })
@@ -93,7 +94,7 @@ class AbdouRecognizerTest {
     @Test fun unstableWindowEdgeNeverCommits() {
         val (pcm, _) = audio(script)
         // the newest 1.2 s of every window is garbage: stable output must be unaffected
-        val rec = AbdouRecognizer(FakeModel(edgeNoiseFrames = 30), vocab)
+        val rec = AbdouRecognizer(FakeModel(edgeNoiseFrames = 30), vocab, normalizer = latin)
         val ev = run(rec, pcm)
         val stable = ev.filter { it.second.isStable }.flatMap { it.second.tokens }.map { it.text }
         assertEquals(script, stable)
@@ -103,7 +104,7 @@ class AbdouRecognizerTest {
 
     @Test fun flushCommitsTailAndClearsProvisional() {
         val (pcm, _) = audio(script.take(4), tailBlocks = 5)
-        val rec = AbdouRecognizer(FakeModel(), vocab)
+        val rec = AbdouRecognizer(FakeModel(), vocab, normalizer = latin)
         val ev = run(rec, pcm).map { it.second } + rec.flush()
         assertEquals(script.take(4), ev.filter { it.isStable }.flatMap { it.tokens }.map { it.text })
         assertTrue(ev.last { !it.isStable }.tokens.isEmpty())
@@ -113,7 +114,7 @@ class AbdouRecognizerTest {
     @Test fun captureTimesAndGapReset() {
         val (pcm1, _) = audio(script.take(3), tailBlocks = 5)
         val (pcm2, _) = audio(script.drop(3).take(3), tailBlocks = 60)
-        val rec = AbdouRecognizer(FakeModel(), vocab)
+        val rec = AbdouRecognizer(FakeModel(), vocab, normalizer = latin)
         val ev1 = run(rec, pcm1, startMs = 1_000_000).map { it.second }
         // 20 s gap (e.g. Qari playback gated the mic): the first utterance is flushed, times follow the clock
         val ev2 = run(rec, pcm2, startMs = 1_000_000L + pcm1.size / 16 + 20_000).map { it.second }

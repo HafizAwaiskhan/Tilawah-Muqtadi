@@ -10,6 +10,7 @@ dependencies {
     compileOnly(libs.onnxruntime.jvm)
     testImplementation(libs.onnxruntime.jvm)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.kotlinx.coroutines.core) // engine exposes StateFlow (engine has it as implementation)
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
 }
