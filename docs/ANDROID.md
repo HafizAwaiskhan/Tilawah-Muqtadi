@@ -65,10 +65,15 @@ core/recognition/  QuranRecognitionEngine (emits engine RecognitionEvent/Token; 
                    UnavailableRecognitionEngine (manual mode: drains audio, emits nothing),
                    SelectableRecognitionEngine (model if installed → manual → debug simulator)
 core/model/        AsrModelSpec (pinned URLs, sizes, SHA-256, licence), ModelDownloadManager
-core/playback/     QuranAudioPlaybackController (Media3; emits Started/Ended), QariAudioResolver
+core/playback/     QuranAudioPlaybackController (Media3, MP3 index seeking; emits Started/Ended),
+                   QariAudioResolver → TestQariAudioResolver (file → stream when online → Offline)
+core/qari/         AlafasyTestQari (URL pattern, ayah counts, sizes), QariDownloadManager,
+                   QariTimingSource (debug-only timing asset)
+core/cue/          SessionCues (gentle vibration, soft ToneGenerator beep)
+core/net/          NetworkStatus (validated internet?)
 core/time/         Clock (wall + monotonic) for testability
 data/settings/     UserSettings + DataStore repository
-data/db/           Room: sessions, bookmarks (no audio, no transcripts)
+data/db/           Room v2: sessions, bookmarks, flagged_words (no audio, no transcripts); MIGRATION_1_2
 data/session/      Session/Bookmark repositories
 data/reference/    QuranReferenceRepository (read-only SQLite asset), WordDisplayRule,
                    EngineReference (word table → engine QuranReference, loaded once, cached)
@@ -107,12 +112,34 @@ StateFlow → ViewModels / notification`, with controller snapshots persisted to
 * **Persistence.** A Room row is created at StartSession (start = requested ayah or 1:1, updated
   to the first located ayah); the snapshot is written whenever the confirmed position or the
   status changes and on stop (COMPLETED + endedAt; deleted if "keep history" is off). Room
-  schema unchanged (one new `updateStart` query). Recovery maps `lastSurah/lastAyah/lastWord` back
+  schema v2 adds `flagged_words` (migration tested on JVM against the exported schema). Recovery maps `lastSurah/lastAyah/lastWord` back
   to a global word id (`lastWord = 0` → locate again).
 * **Hints.** When the controller exposes `activeHint`, the clip comes from `QariAudioResolver`
   (word timings for NEXT_WORD/PHRASE, the whole ayah for FULL_AYAH). With no Qari audio a
-  gentle notice is shown and `PlaybackEnded` is sent at once, so recitation resumes.
-  `smartAssistance = off` declines automatic offers silently (the Lukma button still works).
+  gentle notice is shown ("not downloaded and you're offline" / "not available") and
+  `PlaybackEnded` is sent at once, so recitation resumes. A mistake's "correct word" without word
+  timings falls back to the whole ayah. `smartAssistance = off` declines automatic offers
+  (pause and mistake) silently; mistakes are still flagged and cued; the Lukma button still works.
+* **Mistakes → Lukma.** A surfaced mistake comes with a MISTAKE offer (engine, ENGINE.md). The card
+  ("Check this ayah?") plays Settings → "On mistake, play" (Full ayah [default] / Correct word only)
+  as its main button (`acceptOffer(null)` maps the setting), the other choice as secondary, or
+  Continue. Afterwards the user re-recites the ayah from its first word.
+* **Flagged words.** New entries of `feedback` (detected with `feedbackCount`) become
+  `LiveSession.flagged` and Room `flagged_words` rows (session id, surah, ayah, word index, mistake
+  type, time — no audio/transcript). "Mark flagged words in text" underlines them in red in the
+  Recitation screen; tapping one shows the expected word (DB text) and "Play the ayah"
+  (`playFlaggedAyah`: a user-initiated full-ayah hint while listening, else a plain preview with the
+  gate closed). The Stop summary and History → session details list them; a tap opens the ayah in
+  the Quran screen. Deleting a session deletes its flags (FK cascade + explicit delete).
+* **Cues.** On a new flag or a new (non-declined) offer the manager — not the UI, so it works with
+  the screen locked — calls `SessionCues`: gentle vibration [on] (waveform 35/90/35 ms at low
+  amplitude, `USAGE_NOTIFICATION` attributes, skipped in silent mode) and soft tone [off]
+  (`ToneGenerator` beep, 120 ms, volume 25 on STREAM_MUSIC → current output). For the tone the
+  audio gate closes 60 ms before it and reopens 120 ms + 300 ms tail after it (same
+  `recognitionSuppressed` window as hints; this also flushes the recognizer segment).
+* **New session** (Home "Session in progress" card, Recitation controls; confirm dialog): flush →
+  Stop (saved like Stop) → StartSession with automatic position detection, on the same engine
+  queue. `LiveSession.restarting` keeps the microphone service alive across the STOPPED in between.
 * **Recitation screen** renders the engine state label, pause class, current ayah with the
   candidate word highlighted (tap a word = manual position), the next ayah dimmed, the offer card
   (Play hint / Play full ayah / Continue), surfaced feedback phrased gently, and Previous/Next word
@@ -199,8 +226,15 @@ Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
 1. **Device validation of the recognizer**: CPU per audio second on ARM, RSS after load, battery,
    whether the worker keeps up; tune `AbdouConfig` (window/hop) and ORT threads per device class.
    Nothing has run on a device yet (docs/STATUS.md checklist).
-2. **Qari audio** — licensed source + permission, download manager entry, `QariAudioResolver`
-   (ayah clips + word timings), Home "Qari audio" row. Hints stay disabled until then.
+2. **Qari audio** — a licensed source + permission is still needed. For the owner's testing only:
+   Settings → Offline downloads → "Mishary Alafasy (for personal testing only — not licensed for
+   distribution)": per-surah or whole-Quran (1.71 GB) download of
+   `https://everyayah.com/data/Alafasy_128kbps/SSSAAA.mp3` into `filesDir/qari/alafasy-test/`
+   (`.part` → rename, MP3 header check, `SSS.done` marker; continues with missing ayahs after an
+   interruption; stops with the process — no WorkManager). Not-downloaded ayahs stream from the same
+   URL when online. Word timings: `buildQariTestTimings` converts `data/raw/.../segments_recitation7`
+   (these files are byte-identical to Quran.com recitation 7) into `assets/qari/alafasy_timings.tsv`
+   of **debug builds only** (77,392 words; release builds have none → next-word hints show a notice).
 3. **Font** — licensed Indo-Pak Nastaleeq font (see "Quran text").
 4. Thresholds (pause, feedback, VAD) are tuned on synthetic data and professional recitations only;
    re-tune on learner recordings.
@@ -217,7 +251,11 @@ Manifest: `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`,
 * Incoming/outgoing call, VoIP call, another media app taking focus, wired/BT headset unplug.
 * `AudioRecord` with VOICE_RECOGNITION on several OEMs; AEC availability; BT HFP mic.
 * Process death (`adb shell am kill com.qurancompanion` while recording) → Home resume.
-* Hint playback isolation (no mic frames during playback + tail) once Qari audio exists.
+* Hint playback isolation (no mic frames during playback + tail) with the Alafasy test audio, on the
+  speaker and on earbuds; soft-tone isolation (the tone must never be recognised as a word).
+* Vibration / tone cues with the screen locked; silent / vibrate ringer modes.
+* Room migration 1 → 2 on a phone that has v1 history (install the previous APK, record a
+  session, update): history must survive.
 * Arabic word rendering/line breaking with the system font; RTL layout; TalkBack.
 * First-run DB copy time (18 MB) on low-end devices; battery drain per hour.
 * Model download on Wi-Fi/mobile, pause/resume, airplane mode mid-download, process kill mid-download.

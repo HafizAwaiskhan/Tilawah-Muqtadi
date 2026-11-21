@@ -53,7 +53,11 @@ Tanzil-style encoding). Ayah counts agree across Tanzil metadata, Quran.com and 
   86, 312) says: **"We don't have copyright information for this resource."**
 
 ### Qari audio
-* **everyayah.com** — ayah-by-ayah MP3 per reciter under `https://everyayah.com/data/<Reciter_bitrate>/SSSAAA.mp3`,
+* **everyayah.com** — ayah-by-ayah MP3 per reciter under `https://everyayah.com/data/<Reciter_bitrate>/SSSAAA.mp3`
+  (verified 2026-11-21 for `Alafasy_128kbps`: 6,236 ayah files + 112 `SSS000` basmalah files, 1.71 GB in total;
+  files 001007, 002255, 018010, 114001 are byte-identical to `verses.quran.com/Alafasy/mp3/…`, i.e. the
+  Quran.com recitation-7 segments in `segments_recitation7/` time these files; used by the app's
+  testing-only Qari download, LICENSES.md row 9),
   reciter list in `data/recitations.js`, timing files under `data/timings_files/`. No licence or
   permission text found on the home page, the old index page, `recitations.js` or reciter
   folder listings (they contain only MP3s, zips and `000_checksum.md5`). Contact link points to

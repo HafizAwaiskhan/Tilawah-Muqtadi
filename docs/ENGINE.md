@@ -176,6 +176,19 @@ confirms → `HintRequest` (NEXT_WORD by default; PHRASE = up to 3 words stoppin
 FULL_AYAH). User-initiated `RequestLukma` skips the offer; repeated requests for the same word
 escalate word → phrase → ayah. **Nothing is ever produced without an explicit user action.**
 
+**Lukma on a confirmed mistake.** When the feedback policy surfaces a mistake (same thresholds,
+self-correction window and cooldowns as before) the controller also makes a `LukmaOffer(reason =
+MISTAKE, mistakeWordId)` if no offer is pending and the 20 s Lukma cooldown allows
+(POSSIBLE_MISTAKE → ASSISTANCE_OFFERED → WAITING_FOR_CONFIRMATION). The offer stays while the user
+keeps reciting nearby and is withdrawn once they are past the following ayah, after
+`mistakeOfferTimeoutMs` (30 s), on manual repositioning or on loss of tracking. `AcceptOffer(null)`
+plays `LukmaConfig.mistakeHintLevel` (FULL_AYAH = the mistake's whole ayah); `AcceptOffer(NEXT_WORD)`
+plays just the expected word. PAUSE offers keep the smallest-hint default. After a MISTAKE hint ends
+(or is cut short by pause/interruption/stop) the tracker is restored to the word before the ayah's
+first word — the user re-recites the ayah; playback never advances the position (guard unchanged).
+`RequestLukma(level, wordId)` does the same for a tapped flagged word. `SessionUiState.feedbackCount`
+counts surfaced mistakes (the `feedback` list is capped) so the app can persist new flags.
+
 **Playback guard.** Opened at the hint request (not only at `PlaybackStarted`); while open all
 tokens are dropped; afterwards tokens overlapping [start, end + 300 ms] or the recognizer's
 `suppressedWindow` are dropped (tokens without timestamps use the event time).
@@ -197,12 +210,14 @@ tokens are dropped; afterwards tokens overlapping [start, end + 300 ms] or the r
 | `PauseConfig` | listening / evaluate / long ms | 3000 / 6000 / 10000 | |
 | | pausePointMultiplier, referenceWordIntervalMs, pace clamp | 2.0, 700, [0.8, 1.6] | |
 | `FeedbackConfig` | per-mode threshold / types / cooldown / maxPerAyah; pausePointPenalty; minTrackingConfidence | see above; 0.1; 0.6 | |
-| `LukmaConfig` | phraseWords / offerCooldownMs | 3 / 20000 | |
+| `LukmaConfig` | phraseWords / offerCooldownMs / mistakeHintLevel / mistakeOfferTimeoutMs | 3 / 20000 / FULL_AYAH / 30000 | |
 | `SessionConfig` | playbackTailMs / offerAt | 300 / EVALUATE | |
 
 ## Validation (synthetic)
 
-88 JVM tests (incl. `ManualPositionTest`): component tests for every class, the state table, and scenarios on a synthetic
+96 JVM tests (incl. `ManualPositionTest`, `MistakeLukmaTest`: mistake → offer → accept →
+PLAYING_FULL_AYAH → resume at ayah start; word-only; decline; self-corrected → no offer; offer kept
+while reciting nearby / withdrawn after moving on / timeout; flagged-word replay): component tests for every class, the state table, and scenarios on a synthetic
 reference (3 surahs, 237 ayahs, Zipf word frequencies, a refrain repeated 4×, a phrase shared by two
 surahs, an ayah identical across surahs): breathing pause, waqf pause, forgotten word → offer → hint →
 resume, repeat current ayah, previous ayah, skip, surah jump, mid-ayah start, ambiguous refrain,
