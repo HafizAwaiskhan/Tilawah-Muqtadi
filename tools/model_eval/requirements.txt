@@ -1,0 +1,8 @@
+# tools/model_eval: python3 -m venv tools/model_eval/.venv && tools/model_eval/.venv/bin/pip install -r tools/model_eval/requirements.txt
+numpy==2.5.5
+onnxruntime==1.32.0
+onnx
+scipy==1.18.1
+soundfile==0.14.0
+sherpa-onnx==2.0.2        # only for check-sherpa (parity with the engine the model author ships)
+kaldi-native-fbank        # only for check-fbank
