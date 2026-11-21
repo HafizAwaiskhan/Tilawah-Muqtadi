@@ -29,11 +29,18 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "REFERENCE_DB_ASSET", "\"$referenceDbName\"")
+        // ONNX Runtime ships ~20-33 MB of native code per ABI: phones only (x86 dropped entirely).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
+        debug {
+            // x86_64 emulators (debug only).
+            ndk { abiFilters += "x86_64" }
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -76,6 +83,7 @@ tasks.named("preBuild") { dependsOn(copyReferenceDb) }
 
 dependencies {
     implementation(project(":engine"))
+    implementation(project(":asr"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

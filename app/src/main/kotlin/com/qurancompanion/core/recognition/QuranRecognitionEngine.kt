@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.emptyFlow
 
 /** Readiness of the on-device recognition model (downloaded, verified, loaded). */
 sealed interface ModelReadiness {
-    /** No model is bundled/downloaded (current state until Phase 2 picks a model). */
+    /** No verified model is installed (download it from Onboarding or Settings). */
     data object NotInstalled : ModelReadiness
     data class Downloading(val progress: Float) : ModelReadiness
     data object Loading : ModelReadiness
@@ -45,6 +45,13 @@ interface QuranRecognitionEngine {
     fun startListening(audio: Flow<ShortArray>)
 
     fun stopListening()
+
+    /**
+     * Ends the current utterance (Stop / Pause / before a hint plays): commits the recognizer's
+     * tail. Returns after the resulting events have been delivered to the [observeRecognition]
+     * collector, so inputs sent afterwards are ordered after them. Default: nothing to flush.
+     */
+    suspend fun flush() {}
 
     fun observeRecognition(): Flow<RecognitionEvent>
 

@@ -118,10 +118,11 @@ fun HomeScreen(
                 ReadinessRow(
                     "Recognition model",
                     when (val m = state.model) {
-                        ModelReadiness.NotInstalled -> "Not installed — tap the word you are on to follow along"
+                        ModelReadiness.NotInstalled -> "Not installed — download it in Settings → Offline downloads. " +
+                            "Until then, tap the word you are on to follow along"
                         is ModelReadiness.Downloading -> "Downloading ${(m.progress * 100).toInt()}%"
                         ModelReadiness.Loading -> "Loading…"
-                        is ModelReadiness.Ready -> "Ready (${m.modelId} ${m.version})"
+                        is ModelReadiness.Ready -> "Ready — offline (${m.modelId} ${m.version})"
                         is ModelReadiness.Failed -> "Error: ${m.message}"
                     },
                     state.model.isReady,

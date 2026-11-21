@@ -91,6 +91,27 @@ class RecitationSessionManagerTest {
         assertTrue(repo.rows.value.isEmpty())
     }
 
+    @Test fun pauseAndStopFlushTheRecognizerFirst() = runTest {
+        val m = manager()
+        m.start(); runCurrent()
+        say(m, 2, 3, 1..4)
+        val before = m.state.value.engine.confirmed!!.wordIndex
+        // The flush commits the next word; it must reach the controller before Pause does.
+        recognizer.onFlush = {
+            val t = testScheduler.currentTime
+            m.onRecognitionEvent(RecognitionEvent(listOf(Token(ref.word(ref.ayahWords(2, 3)!!.first + 4).matchKey, t - 400, t, 0.95f)), true, t))
+        }
+        m.pause(); runCurrent()
+        assertEquals(1, recognizer.flushes)
+        assertEquals(ListeningStatus.PAUSED, m.state.value.status)
+        assertTrue(m.state.value.engine.confirmed!!.wordIndex > before)
+        recognizer.onFlush = null
+        m.resume(); runCurrent()
+        m.stop(); runCurrent()
+        assertEquals(ListeningStatus.STOPPED, m.state.value.status)
+        assertTrue(recognizer.flushes >= 2)
+    }
+
     @Test fun pauseExcludesPausedTimeFromDuration() = runTest {
         val m = manager()
         m.start(); runCurrent()

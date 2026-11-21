@@ -6,6 +6,11 @@ import com.qurancompanion.core.playback.NoDownloadedQariAudio
 import com.qurancompanion.core.playback.QariAudioResolver
 import com.qurancompanion.core.playback.QuranAudioPlayback
 import com.qurancompanion.core.playback.QuranAudioPlaybackController
+import com.qurancompanion.core.model.AsrModelSpec
+import com.qurancompanion.core.model.ModelDownloadManager
+import com.qurancompanion.core.model.UrlConnectionHttpSource
+import com.qurancompanion.core.recognition.AbdouOnnxRecognizerLoader
+import com.qurancompanion.core.recognition.AbdouRecognitionEngine
 import com.qurancompanion.core.recognition.QuranRecognitionEngine
 import com.qurancompanion.core.recognition.SelectableRecognitionEngine
 import com.qurancompanion.core.recognition.SimulatedRecognizerFactory
@@ -35,6 +40,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import java.io.File
+import java.util.concurrent.Executors
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -62,6 +70,21 @@ object AppProvidesModule {
     @Provides @Singleton @EngineDispatcher
     fun engineDispatcher(): CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
 
+    @Provides @Singleton
+    fun modelDownloads(@ApplicationContext context: Context, @ApplicationScope scope: CoroutineScope): ModelDownloadManager =
+        ModelDownloadManager(File(context.filesDir, "models"), AsrModelSpec.ABDOU_V1, UrlConnectionHttpSource(), Dispatchers.IO, scope)
+
+    /** One dedicated thread runs the ASR model (load, accept, flush). */
+    @Provides @Singleton
+    fun abdouEngine(downloads: ModelDownloadManager, clock: Clock): AbdouRecognitionEngine {
+        val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "abdou-asr").apply { isDaemon = true } }
+            .asCoroutineDispatcher()
+        return AbdouRecognitionEngine(
+            downloads.spec, downloads.state, AbdouOnnxRecognizerLoader(threads = 2), worker,
+            clock::elapsedRealtime, CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        )
+    }
+
     @Provides fun sessionDao(db: AppDatabase): SessionDao = db.sessionDao()
     @Provides fun bookmarkDao(db: AppDatabase): BookmarkDao = db.bookmarkDao()
 }
@@ -79,10 +102,7 @@ abstract class AppBindsModule {
 
     @Binds abstract fun engineReference(impl: CachedEngineReference): EngineReferenceSource
 
-    /**
-     * Real engine (UnavailableRecognitionEngine until a model is chosen — TODO(model): bind the
-     * ONNX-backed engine inside SelectableRecognitionEngine) or, in debug builds, the simulator.
-     */
+    /** Abdou model engine when installed, manual mode otherwise, or (debug) the simulator. */
     @Binds abstract fun recognition(impl: SelectableRecognitionEngine): QuranRecognitionEngine
 
     /** Bound only in debug builds (src/debug DebugModule). */

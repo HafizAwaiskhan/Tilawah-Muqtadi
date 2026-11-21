@@ -103,6 +103,8 @@ class RecitationSessionManager @Inject constructor(
     private var controller: RecitationSessionController? = null
     @Volatile private var ref: QuranReference? = null
     @Volatile private var recognizerBound = false
+    /** Engine bound by [runRecognizer]; flushed before Pause/Stop/Lukma so its tail is committed first. */
+    @Volatile private var activeRecognizer: QuranRecognitionEngine? = null
 
     // Persistence-queue confined.
     private var roomId: Long? = null
@@ -304,7 +306,7 @@ class RecitationSessionManager @Inject constructor(
         }
     }
 
-    fun pause() = send(SessionInput.Pause)
+    fun pause() = flushThen(SessionInput.Pause)
 
     fun resume() = onEngine { c, _ ->
         when (c.currentState) {
@@ -314,7 +316,19 @@ class RecitationSessionManager @Inject constructor(
         }
     }
 
-    fun stop() = send(SessionInput.Stop)
+    fun stop() = flushThen(SessionInput.Stop)
+
+    /**
+     * Sends [input] after the recognizer has committed its tail (flush), so words recited just
+     * before Pause / Stop / Lukma are processed while the controller is still listening.
+     */
+    private fun flushThen(input: SessionInput) {
+        val e = activeRecognizer ?: return send(input)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { e.flush() }
+            send(input)
+        }
+    }
 
     /** Dismisses a stopped session's summary (the controller stays STOPPED until the next start). */
     fun reset() {
@@ -364,6 +378,9 @@ class RecitationSessionManager @Inject constructor(
             if (!open) {
                 if (vad.speaking) send(SessionInput.SpeechActivity(false))
                 vad.reset()
+                // Gate closed (pause, hint, interruption): end the utterance so no stale tail is
+                // committed after the gap. Usually a no-op (already flushed by flushThen).
+                if (recognizerBound) scope.launch { runCatching { engine.flush() } }
                 emptyFlow()
             } else frames()
                 .onEach { f -> vad.process(f)?.let { send(SessionInput.SpeechActivity(it)) } }
@@ -371,6 +388,7 @@ class RecitationSessionManager @Inject constructor(
         }
         engine.initialize()
         engine.startListening(gated)
+        activeRecognizer = engine
         recognizerBound = true
         onEngine { c, _ ->
             if (c.currentState == EngineState.STARTING_SESSION || c.currentState == EngineState.RECOVERING_SESSION) {
@@ -381,6 +399,7 @@ class RecitationSessionManager @Inject constructor(
             awaitCancellation()
         } finally {
             recognizerBound = false
+            activeRecognizer = null
             engine.stopListening()
         }
     }
@@ -412,8 +431,8 @@ class RecitationSessionManager @Inject constructor(
     // ---- Lukma assistance ------------------------------------------------------------------
 
     /** User pressed Lukma: hint for the next word (repeated presses escalate word → phrase → ayah). */
-    fun requestLukma(level: HintLevel? = null) = send(SessionInput.RequestLukma(level))
-    fun acceptOffer(level: HintLevel? = null) = send(SessionInput.AcceptOffer(level))
+    fun requestLukma(level: HintLevel? = null) = flushThen(SessionInput.RequestLukma(level))
+    fun acceptOffer(level: HintLevel? = null) = flushThen(SessionInput.AcceptOffer(level))
     fun declineOffer() = send(SessionInput.DeclineOffer)
 
     /** Stops a playing hint and returns to listening. */

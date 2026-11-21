@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.qurancompanion.ui.components.ModelDownloadCard
 import com.qurancompanion.ui.components.hasMicPermission
 import com.qurancompanion.ui.components.hasNotificationPermission
 
@@ -111,12 +112,16 @@ fun OnboardingScreen(onFinished: () -> Unit) {
                             "no audio recordings are stored. History keeps only positions and " +
                             "durations, and you can delete it or turn it off in Settings.",
                     )
-                    Step.DOWNLOADS -> StepContent(
-                        Icons.Filled.CloudDownload, "Downloads",
-                        "The recognition model and Qari audio for hints are downloaded once and then " +
-                            "work offline. Until they are installed you can still read the Quran, set " +
-                            "your position manually and keep session history.",
-                    )
+                    Step.DOWNLOADS -> {
+                        StepContent(
+                            Icons.Filled.CloudDownload, "Download the model",
+                            "The recognition model is downloaded once (36 MB, Wi-Fi recommended) and then " +
+                                "works offline. You can also do this later in Settings → Offline downloads. " +
+                                "Until it is installed you can still read the Quran, set your position " +
+                                "manually and keep session history. Qari audio for hints is not available yet.",
+                        )
+                        ModelDownloadCard()
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

@@ -108,6 +108,10 @@ class FakeRecognizer(initial: ModelReadiness = ModelReadiness.Ready("fake", "1")
     override fun startListening(audio: Flow<ShortArray>) { listening = true }
     override fun stopListening() { listening = false }
     override fun observeRecognition(): Flow<RecognitionEvent> = events
+    var flushes = 0
+    /** Runs inside [flush] (e.g. delivers a tail word synchronously, as the contract requires). */
+    var onFlush: (() -> Unit)? = null
+    override suspend fun flush() { flushes++; onFlush?.invoke() }
 }
 
 /** Silent 20 ms frames on the (virtual) clock. */

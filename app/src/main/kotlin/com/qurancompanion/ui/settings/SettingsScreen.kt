@@ -36,7 +36,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qurancompanion.core.model.AsrModelSpec
 import com.qurancompanion.data.settings.RecitationMode
+import com.qurancompanion.ui.components.ModelDownloadCard
 import com.qurancompanion.data.settings.UserSettings
 import java.util.Locale
 
@@ -66,6 +68,9 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
             }
         }
         SwitchRow("Vibration", "Vibrate softly when assistance is offered.", s.vibration, vm::setVibration)
+
+        Section("Offline downloads")
+        ModelDownloadCard()
 
         Section("Qari audio")
         SliderRow("Playback speed", s.playbackSpeed, UserSettings.SPEED_RANGE, steps = 9,
@@ -97,6 +102,9 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
             style = MaterialTheme.typography.bodySmall,
         )
         dataVersion?.let { Text("Reference data: $it", style = MaterialTheme.typography.bodySmall) }
+        Text("Speech recognition", style = MaterialTheme.typography.titleSmall)
+        Text(AsrModelSpec.ABDOU_V1.attribution + " Full licence: Offline downloads → View licence.",
+            style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = vm::replayOnboarding) { Text("Show introduction again") }
 
         if (vm.developerAvailable) {
