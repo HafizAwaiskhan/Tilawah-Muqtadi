@@ -1,0 +1,71 @@
+location	layer	status	text_uthmani	other_text	uthmani_loose_key	other_loose_key
+2:178:13	nastaleeq_ayah_span	pua_glyph	وَٱلْأُنثَىٰ	وَالْاُ	لنث	ل
+2:178:14	nastaleeq_ayah_span	pua_glyph	بِٱلْأُنثَىٰ ۚ	بِالْاُ ؕ	بلنث	بل
+3:36:7	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ ؕ	نث	
+3:36:14	nastaleeq_ayah_span	pua_glyph	كَٱلْأُنثَىٰ ۖ	كَالْاُ ۚ	كلنث	كل
+3:195:13	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ ۖ	اُ ۚ	نث	
+4:124:8	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+13:8:6	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+16:58:4	nastaleeq_ayah_span	pua_glyph	بِٱلْأُنثَىٰ	بِالْاُ	بلنث	بل
+16:97:7	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+18:19:34	nastaleeq_ayah_span	pua_glyph	وَلْيَتَلَطَّفْ		لتلطف	
+21:88:7	indopak_word	fuzzy	نُـۨجِى	نُـنْجِى	نج	ننج
+35:11:14	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+40:40:14	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+41:47:14	nastaleeq_ayah_span	pua_glyph	أُنثَىٰ	اُ	نث	
+49:13:7	nastaleeq_ayah_span	pua_glyph	وَأُنثَىٰ	وَّاُ	نث	
+53:21:4	nastaleeq_ayah_span	pua_glyph	ٱلْأُنثَىٰ	الْاُ ۟	لنث	ل
+53:27:9	nastaleeq_ayah_span	pua_glyph	ٱلْأُنثَىٰ	الْاُ ۟	لنث	ل
+53:37:3	nastaleeq_ayah_span	pua_glyph	وَفَّىٰٓ	وَ ۟ۙ	ف	
+53:45:5	nastaleeq_ayah_span	pua_glyph	وَٱلْأُنثَىٰ	وَالْاُ ۟ۙ	لنث	ل
+56:45:4	indopak_word	mismatch	ذَٰلِكَ	ذٰ	ذلك	ذ
+56:45:5	indopak_word	fuzzy	مُتْرَفِينَ	لِكَ مُتۡرَفِيۡنَۚ  ۖ‏	مترفن	لكمترفن
+59:4:1	indopak_word	mismatch	ذَٰلِكَ	ذٰ	ذلك	ذ
+59:4:2	indopak_word	mismatch	بِأَنَّهُمْ	لِكَ	بنهم	لك
+59:4:3	indopak_word	mismatch	شَآقُّوا۟	بِاَنَّهُمۡ	شق	بنهم
+59:4:4	indopak_word	mismatch	ٱللَّهَ	شَآقُّوا	لله	شق
+59:4:5	indopak_word	mismatch	وَرَسُولَهُۥ ۖ	اللّٰهَ	رسله	لله
+59:4:6	indopak_word	mismatch	وَمَن	وَرَسُوۡلَهٗ​ ۚ	من	رسله
+59:4:7	indopak_word	mismatch	يُشَآقِّ	وَمَنۡ	شق	من
+59:4:8	indopak_word	mismatch	ٱللَّهَ	يُّشَآقِّ	لله	شق
+59:4:9	indopak_word	mismatch	فَإِنَّ	اللّٰهَ	فن	لله
+59:4:10	indopak_word	mismatch	ٱللَّهَ	فَاِنَّ	لله	فن
+59:4:11	indopak_word	mismatch	شَدِيدُ	اللّٰهَ	شدد	لله
+59:4:12	indopak_word	mismatch	ٱلْعِقَابِ	شَدِيۡدُ الۡعِقَابِ‏	لعقب	شددلعقب
+65:4:1	nastaleeq_ayah_span	pua_glyph	وَٱلَّـٰٓـِٔى	وَا	ل	
+65:4:12	nastaleeq_ayah_span	pua_glyph	وَٱلَّـٰٓـِٔى	وَّا	ل	
+65:10:9	indopak_word	mismatch	ٱلْأَلْبَـٰبِ	الۡاَ	للبب	ل
+65:10:10	indopak_word	mismatch	ٱلَّذِينَ	لۡبَابِ ۖۚ ۛ	لذن	لبب
+65:10:11	indopak_word	mismatch	ءَامَنُوا۟ ۚ	الَّذِيۡنَ	من	لذن
+65:10:12	indopak_word	mismatch	قَدْ	اٰمَنُوۡا ۛؕ	قد	من
+65:10:13	indopak_word	mismatch	أَنزَلَ	قَدۡ	نزل	قد
+65:10:14	indopak_word	mismatch	ٱللَّهُ	اَنۡزَلَ	لله	نزل
+65:10:15	indopak_word	mismatch	إِلَيْكُمْ	اللّٰهُ اِلَيۡكُمۡ	لكم	للهلكم
+72:16:1	indopak_word	mismatch	وَأَلَّوِ	وَّاَنْ لَّوِ	ل	نل
+72:16:1	nastaleeq_ayah_span	mismatch	وَأَلَّوِ	وَّاَنْ لَّوِ	ل	نل
+73:20:8	nastaleeq_ayah_span	pua_glyph	ثُلُثَىِ		ثلث	
+74:46:1	indopak_word	mismatch	وَكُنَّا	وَ	كن	
+74:46:2	indopak_word	mismatch	نُكَذِّبُ	كُنَّا	نكذب	كن
+74:46:3	indopak_word	mismatch	بِيَوْمِ	نُكَذِّبُ	بم	نكذب
+74:46:4	indopak_word	fuzzy	ٱلدِّينِ	بِيَوۡمِ الدِّيۡنِۙ‏	لدن	بملدن
+75:39:5	nastaleeq_ayah_span	pua_glyph	وَٱلْأُنثَىٰٓ	وَالْاُ ۟ؕ	لنث	ل
+80:3:4	nastaleeq_ayah_span	pua_glyph	يَزَّكَّىٰٓ	یَزَّ ۟ۙ	زك	ز
+92:3:4	nastaleeq_ayah_span	pua_glyph	وَٱلْأُنثَىٰٓ	وَالْاُ ۟ۙ	لنث	ل
+93:7:2	indopak_word	mismatch	ضَآلًّۭا	ضَآ	ضل	ض
+93:7:3	indopak_word	fuzzy	فَهَدَىٰ	لًّا فَهَدٰى‏	فهد	لفهد
+103:3:4	indopak_word	mismatch	وَعَمِلُوا۟	وَ	عمل	
+103:3:5	indopak_word	mismatch	ٱلصَّـٰلِحَـٰتِ	عَمِلُوا	لصلحت	عمل
+103:3:6	indopak_word	mismatch	وَتَوَاصَوْا۟	الصّٰلِحٰتِ	تص	لصلحت
+103:3:7	indopak_word	mismatch	بِٱلْحَقِّ	وَتَوَاصَوۡا	بلحق	تص
+103:3:8	indopak_word	mismatch	وَتَوَاصَوْا۟	بِالۡحَقِّ   ۙ	تص	بلحق
+103:3:9	indopak_word	fuzzy	بِٱلصَّبْرِ	وَتَوَاصَوۡا بِالصَّبۡرِ‏	بلصبر	تصبلصبر
+107:3:1	indopak_word	mismatch	وَلَا	وَ	ل	
+107:3:2	indopak_word	mismatch	يَحُضُّ	لَا	حض	ل
+107:3:3	indopak_word	mismatch	عَلَىٰ	يَحُضُّ	عل	حض
+107:3:4	indopak_word	mismatch	طَعَامِ	عَلٰى	طعم	عل
+107:3:5	indopak_word	fuzzy	ٱلْمِسْكِينِ	طَعَامِ الۡمِسۡكِيۡنِؕ‏	لمسكن	طعملمسكن
+109:5:1	indopak_word	mismatch	وَلَآ	وَ	ل	
+109:5:2	indopak_word	mismatch	أَنتُمْ	لَاۤ	نتم	ل
+109:5:3	indopak_word	mismatch	عَـٰبِدُونَ	اَنۡـتُمۡ	عبدن	نتم
+109:5:4	indopak_word	mismatch	مَآ	عٰبِدُوۡنَ	م	عبدن
+109:5:5	indopak_word	fuzzy	أَعْبُدُ	مَاۤ اَعۡبُدُ ؕ‏	عبد	معبد

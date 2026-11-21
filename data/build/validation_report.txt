@@ -1,0 +1,44 @@
+DB: data/build/quran_ref_v1.db (18014208 bytes, sha256 456a99fd5404124fb3f72165f331f65d00d7b2f3b8f09a83459701e3ff8fed8a)
+[PASS] meta has schema_version - 1
+[PASS] meta has data_version - quran_ref_v1+8b81e3266c6c
+[PASS] meta has build_date - 2026-11-21T00:00:00+00:00
+[PASS] meta has phonetic_status - v0 - requires teacher review
+[PASS] meta has word_count_expected - 77429
+[PASS] meta has manifest_sha256.quran_com_api_v4 - 7c06df0fb9073fa425cef94180e3052abf72fa5aa76fe445207b86f6e84daa2f
+[PASS] meta has manifest_sha256.tanzil - f9477df0af79c4d89290ee7fa344454599581ab2cb3b6a8c2f7a8e1e86743fb5
+[PASS] phonetic marked as requiring teacher review
+[PASS] meta manifest_sha256.quran_com_api_v4 matches data/raw/quran_com_api_v4/MANIFEST.json
+[PASS] meta manifest_sha256.tanzil matches data/raw/tanzil/MANIFEST.json
+[PASS] raw file checksums match MANIFEST.json (all files)
+[PASS] source_file table checksums match manifests - 120 rows
+[PASS] 114 surahs - 114
+[PASS] 6236 ayahs - 6236
+[PASS] word count == expected 77429 - 77429
+[PASS] ayah count per surah: DB ayah rows == surah.ayah_count == Tanzil metadata == Quran.com - []
+[PASS] sum(Tanzil ayas) == 6236
+[PASS] word.id contiguous 0..N-1
+[PASS] ayah.global_index contiguous 0..6235 in surah/ayah order
+[PASS] word_index contiguous 1..word_count per ayah; first_word_id/ayah_global_index consistent - []
+[PASS] sum(ayah.word_count) == word rows
+[PASS] no empty word.text_uthmani - 0
+[PASS] no empty word.text_indopak - 0
+[PASS] no empty word.norm_skeleton - 0
+[PASS] no empty word.phonetic - 0
+[PASS] no empty ayah.text_uthmani - 0
+[PASS] no empty ayah.text_uthmani_tanzil - 0
+[PASS] no empty ayah.text_indopak - 0
+[PASS] no empty ayah.text_indopak_nastaleeq - 0
+[PASS] word.text_uthmani / text_indopak byte-identical to Quran.com raw JSON - 0
+[PASS] ayah Quran.com texts byte-identical to raw JSON - 0
+[PASS] ayah.text_uthmani_tanzil byte-identical to Tanzil XML - 0
+[PASS] every word.text_indopak_nastaleeq is an exact substring of its ayah text - 0
+[PASS] Quran.com Uthmani vs Tanzil Uthmani: ayah norm_skeleton identical - 0 ayahs differ
+[PASS] norm_skeleton / phonetic / stop_marks reproduce from text_uthmani - 0
+[PASS] phonetic tokens within documented symbol set - []
+Mapping coverage:
+  word.indopak_check: {"fuzzy": 7, "match": 77384, "mismatch": 38}  verified=77384/77429 (99.942%)
+  word.nastaleeq_map: {"match": 77400, "mismatch": 1, "pua_glyph": 24, "split_1to2": 4}  verified=77404/77429 (99.968%)
+  word.text_indopak_nastaleeq non-null: 77429/77429
+[PASS] every non-verified mapping is listed in word_map_issue - 70 issues
+[PASS] Indo-Pak (Quran.com word) verified coverage >= 99.9%
+RESULT: ALL CHECKS PASSED

@@ -1,0 +1,18 @@
+{
+  "ayahs": 6236,
+  "data_version": "quran_ref_v1+8b81e3266c6c",
+  "indopak_check": {
+    "fuzzy": 7,
+    "match": 77384,
+    "mismatch": 38
+  },
+  "nastaleeq_map": {
+    "match": 77400,
+    "mismatch": 1,
+    "pua_glyph": 24,
+    "split_1to2": 4
+  },
+  "nastaleeq_unaligned_ayahs": [],
+  "tanzil_skeleton_mismatch_ayahs": [],
+  "words": 77429
+}
