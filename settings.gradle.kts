@@ -7,4 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "QuranCompanion"
 include(":engine")
-// :app is added by the Android foundation work once the Android SDK is installed.
+include(":app")
