@@ -1,0 +1,70 @@
+{
+  "source": "License evidence snapshots",
+  "description": "Pages whose wording is quoted in docs/LICENSES.md",
+  "generated_by": "tools/reference/fetch_sources.py",
+  "files": [
+    {
+      "path": "tanzil_text_license.html",
+      "url": "https://tanzil.net/docs/text_license",
+      "retrieved_at": "2026-11-21T20:00:44+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 7903,
+      "sha256": "31865b58aacf22024481397e5a70797241933a3660e03bc3deef1a219dfe93e8",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_faq.html",
+      "url": "https://qul.tarteel.ai/faq",
+      "retrieved_at": "2026-11-21T20:00:45+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 68703,
+      "sha256": "eabe061160ca1975322262252740de38cd52f1d71367dbe2422d1e451889ce2f",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_indopak_nastaleeq_wbw_licence.html",
+      "url": "https://qul.tarteel.ai/resources/quran-script/59/licence",
+      "retrieved_at": "2026-11-21T20:00:45+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 59436,
+      "sha256": "715ff87444f9d7e78adafa65e6bd70460dd31b9c0b50a72fd11c0f5c4dfa7beb",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_indopak_nastaleeq_font_licence.html",
+      "url": "https://qul.tarteel.ai/resources/font/242/licence",
+      "retrieved_at": "2026-11-21T20:00:45+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 57308,
+      "sha256": "7779fa37462972ee437d66182e3ab0efb33016d85bc3ce181474e4dd60e06a78",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_alafasy_recitation_licence.html",
+      "url": "https://qul.tarteel.ai/resources/recitation/118/licence",
+      "retrieved_at": "2026-11-21T20:00:46+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 56454,
+      "sha256": "9977f9fb4a053367d021e75c6f2d5df6cd2f600082e0f1aa8a150cd72b263d88",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_indopak_15_lines_layout_licence.html",
+      "url": "https://qul.tarteel.ai/resources/mushaf-layout/12/licence",
+      "retrieved_at": "2026-11-21T20:00:46+00:00",
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 102586,
+      "sha256": "2690b0d6fbe7f5562e4981438e3a3bb5a51a23d702047588012ed2f7a81ebbfe",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    },
+    {
+      "path": "qul_github_LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/TarteelAI/quranic-universal-library/main/LICENSE",
+      "retrieved_at": "2026-11-21T20:00:46+00:00",
+      "content_type": "text/plain; charset=utf-8",
+      "bytes": 1077,
+      "sha256": "8b3b5423a16eb7237ff0afe2db3d188859938ae4a82eca489d2dfbd464b7b0c1",
+      "license": "Copy of a public web page kept only as evidence of its license/terms wording on the retrieval date."
+    }
+  ]
+}

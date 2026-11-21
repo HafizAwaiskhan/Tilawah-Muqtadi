@@ -1,0 +1,27 @@
+{
+  "source": "Tanzil Project (tanzil.net)",
+  "description": "Uthmani Hafs Quran text + metadata",
+  "generated_by": "tools/reference/fetch_sources.py",
+  "files": [
+    {
+      "path": "quran-uthmani.xml",
+      "url": "https://tanzil.net/pub/download/index.php?marks=true&sajdah=true&rub=false&tatweel=true&quranType=uthmani&outType=xml&agree=true",
+      "retrieved_at": "2026-11-21T19:59:18+00:00",
+      "content_type": "application/octet-stream; charset=utf-8",
+      "bytes": 1541984,
+      "sha256": "c5052534d63d3856ce25413ff464d0b609f90169a202a1615aa8707efec81244",
+      "license": "Tanzil Quran Text, Copyright (C) 2007-2026 Tanzil Project, Creative Commons Attribution 3.0. Verbatim copies only - CHANGING IT IS NOT ALLOWED; source (Tanzil Project) must be clearly indicated with a link to tanzil.net; copyright notice must be included. See https://tanzil.net/docs/text_license",
+      "note": "Tanzil Uthmani (Hafs) text, XML. Options: pause marks=on, sajdah sign=on, rub-el-hizb=off, tatweel=on (site defaults for Uthmani)."
+    },
+    {
+      "path": "quran-data.xml",
+      "url": "https://tanzil.net/res/text/metadata/quran-data.xml",
+      "retrieved_at": "2026-11-21T19:59:18+00:00",
+      "content_type": "text/xml",
+      "bytes": 77234,
+      "sha256": "8867c1d88191472adec9db694b3cd9f135b1a2ef580574d32cf888dcb22c5c7a",
+      "license": "Tanzil Quran metadata (see https://tanzil.net/docs/Quran_Metadata); distributed with Tanzil text; same project terms assumed - attribution to Tanzil Project.",
+      "note": "Surah names, ayah counts, revelation type/order, juz/hizb/page/ruku/sajda partitions."
+    }
+  ]
+}
