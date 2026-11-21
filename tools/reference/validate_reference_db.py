@@ -17,6 +17,8 @@ import sqlite3
 import sys
 import xml.etree.ElementTree as ET
 
+sys.dont_write_bytecode = True  # importing the builder must not leave __pycache__ behind
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 RAW = os.path.join(REPO, "data", "raw")
