@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Quran Companion</string>
+    <string name="notification_channel_recitation">Recitation session</string>
+    <string name="notification_channel_recitation_desc">Shown while Quran Companion is listening to your recitation.</string>
+    <string name="notification_title_listening">Listening to your recitation</string>
+    <string name="notification_title_paused">Recitation paused</string>
+    <string name="notification_title_interrupted">Recitation interrupted</string>
+    <string name="notification_action_pause">Pause</string>
+    <string name="notification_action_resume">Resume</string>
+    <string name="notification_action_stop">Stop</string>
+</resources>
